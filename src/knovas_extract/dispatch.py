@@ -115,16 +115,29 @@ def _detect_mime(data: bytes, filename: str | None) -> str:
         if m and m != "application/octet-stream":
             libmagic_mime = m
 
-    # libmagic over-classifies several container formats: Office Open XML
-    # (DOCX/XLSX/PPTX) is reported as application/zip; HTML with an XML
-    # prologue is reported as text/xml. In those cases the filename
-    # extension is more informative — prefer it. We never trust the
-    # filename when libmagic returned a content-specific answer.
-    _CONTAINER_MIMES = {"application/zip", "text/xml", "application/xml"}
-    if libmagic_mime in _CONTAINER_MIMES and filename:
+    # libmagic version-skew across platforms: macOS, Linux, and Windows ship
+    # different libmagic versions, some of which classify our v1 formats with
+    # less-specific MIMEs than the filename extension implies. When we have a
+    # known filename extension AND libmagic's answer is in the generic /
+    # container set, prefer the extension. Examples:
+    #   - DOCX → libmagic often says application/zip (it IS a ZIP)
+    #   - XHTML / HTML-with-<?xml?> → text/xml or application/xml
+    #   - EML → some libmagic versions say text/plain (it's RFC 5322 text)
+    #   - extension-tagged plain text → text/plain (no harm)
+    # We never trust the filename when libmagic returned a content-specific,
+    # non-container MIME that disagrees with extension.
+    _GENERIC_MIMES = {
+        "application/zip",
+        "text/xml",
+        "application/xml",
+        "text/plain",
+        "application/octet-stream",
+    }
+    if filename:
         ext = Path(filename).suffix.lower()
-        if ext in EXT_REGISTRY:
-            return EXT_REGISTRY[ext]
+        ext_mime = EXT_REGISTRY.get(ext)
+        if ext_mime and (libmagic_mime in _GENERIC_MIMES or libmagic_mime is None):
+            return ext_mime
     if libmagic_mime is not None:
         return libmagic_mime
 
