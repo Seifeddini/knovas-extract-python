@@ -72,6 +72,26 @@ jobs:
           token: ${{ secrets.SPEC_TOKEN || secrets.GITHUB_TOKEN }}
         continue-on-error: true
 
+      # actions/checkout's `lfs: true` is unreliable across repo boundaries —
+      # for a *different* public repo it sometimes leaves files as 132-byte
+      # LFS pointers instead of materializing the real bytes. Force an
+      # explicit `git lfs pull` and verify a known binary's first bytes.
+      - name: Hydrate spec LFS objects
+        if: steps.spec-checkout.outcome == 'success'
+        shell: bash
+        working-directory: knovas-extract-spec
+        run: |
+          git lfs install --local
+          git lfs pull
+          # Sanity: simple-text.pdf must begin with '%PDF' (real bytes), not 'version' (LFS pointer).
+          head -c 4 corpus/pdf/simple-text.pdf | xxd | head -1
+          if head -c 8 corpus/pdf/simple-text.pdf | grep -q '%PDF-'; then
+            echo "::notice::spec LFS hydrated successfully"
+          else
+            echo "::error::spec corpus binaries are still LFS pointers — extractor tests will fail"
+            exit 1
+          fi
+
       - name: Export KNOVAS_EXTRACT_SPEC_DIR if spec was fetched
         if: steps.spec-checkout.outcome == 'success'
         shell: bash
