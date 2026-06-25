@@ -1,0 +1,54 @@
+knovas-extract — Python implementation
+Copyright 2026 Knovas
+
+This product includes software developed at Knovas (https://knovas.ch/).
+
+================================================================================
+
+Third-party components used at runtime:
+
+* PyMuPDF (https://github.com/pymupdf/PyMuPDF)
+  License: AGPL-3.0
+  Used by: src/knovas_extract/extractors/pdf.py
+  NOTE: PyMuPDF is AGPL-licensed. If you embed knovas-extract in a closed-source
+  application and PyMuPDF is loaded at runtime, AGPL section 13 obligations may
+  apply. Use `pip install knovas-extract[minimal]` to install without PyMuPDF
+  (PDF extraction will raise DependencyMissingError until you opt in).
+
+* python-docx (https://github.com/python-openxml/python-docx)
+  License: MIT
+  Used by: src/knovas_extract/extractors/docx.py
+
+* mammoth (https://github.com/mwilliamson/python-mammoth)
+  License: BSD-2-Clause
+  Used by: src/knovas_extract/extractors/docx.py (heading extraction)
+
+* extract-msg (https://github.com/TeamMsgExtractor/msg-extractor)
+  License: GPL-3.0
+  Used by: src/knovas_extract/extractors/msg.py
+
+* selectolax (https://github.com/rushter/selectolax)
+  License: MIT
+  Used by: src/knovas_extract/extractors/html.py
+
+* striprtf (https://github.com/joshy/striprtf)
+  License: BSD-3-Clause
+  Used by: src/knovas_extract/extractors/rtf.py
+
+* python-magic (https://github.com/ahupp/python-magic)
+  License: MIT
+  Used by: src/knovas_extract/dispatch.py (MIME detection)
+
+* defusedxml (https://github.com/tiran/defusedxml)
+  License: PSF-2.0
+  Used by: any XML parsing path (XXE / billion-laughs protection)
+
+* python-frontmatter (https://github.com/eyeseast/python-frontmatter)
+  License: MIT
+  Used by: src/knovas_extract/extractors/md.py
+
+* chardet (https://github.com/chardet/chardet)
+  License: LGPL-2.1
+  Used by: src/knovas_extract/extractors/txt.py (encoding detection)
+
+This NOTICE is regenerated from the SBOM on every release. Last manual update: 2026-06-25.

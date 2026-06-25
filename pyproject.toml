@@ -1,0 +1,277 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+# ---------------------------------------------------------------------------
+# Package metadata (PEP 621).
+# ---------------------------------------------------------------------------
+[project]
+name = "knovas-extract"
+version = "0.1.0.dev0"
+description = "Privacy-preserving, performant document extraction (text + metadata) for the Knovas Semantix platform. Python reference implementation."
+readme = "README.md"
+requires-python = ">=3.11"
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
+keywords = ["pdf", "docx", "msg", "extraction", "text", "metadata", "knovas", "semantix"]
+authors = [
+  { name = "Knovas", email = "engineering@knovas.ch" },
+]
+maintainers = [
+  { name = "Knovas", email = "engineering@knovas.ch" },
+]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: Apache Software License",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Text Processing",
+]
+
+# Core runtime — present in every install.
+# Format-specific deps live in optional extras to keep the base install minimal
+# AND to give license-sensitive users a permissive-only install path.
+dependencies = [
+  "python-magic >= 0.4.27 ; sys_platform != 'win32'",
+  "python-magic-bin >= 0.4.14 ; sys_platform == 'win32'",
+  "defusedxml >= 0.7.1",
+  "chardet >= 5.2.0",
+]
+
+[project.optional-dependencies]
+# Permissive-only path (no AGPL / no GPL). PDF / MSG extraction will raise
+# DependencyMissingError until the user opts into [pdf] / [msg].
+minimal = []
+
+# Format extras — opt-in per format.
+pdf  = ["pymupdf >= 1.24.0"]              # AGPL
+docx = ["python-docx >= 1.1.2", "mammoth >= 1.8.0"]
+msg  = ["extract-msg >= 0.48.0"]          # GPL
+html = ["selectolax >= 0.3.21"]
+rtf  = ["striprtf >= 0.0.27"]
+md   = ["python-frontmatter >= 1.1.0"]
+
+# Convenience: everything (note licensing implications).
+all = [
+  "knovas-extract[pdf,docx,msg,html,rtf,md]",
+]
+
+[project.urls]
+Homepage      = "https://github.com/knovas/knovas-extract-python"
+Documentation = "https://github.com/knovas/knovas-extract-python#readme"
+Repository    = "https://github.com/knovas/knovas-extract-python"
+Issues        = "https://github.com/knovas/knovas-extract-python/issues"
+Security      = "https://github.com/knovas/knovas-extract-python/blob/main/SECURITY.md"
+Changelog     = "https://github.com/knovas/knovas-extract-python/blob/main/CHANGELOG.md"
+
+[project.scripts]
+knovas-extract = "knovas_extract.cli:main"
+
+# ---------------------------------------------------------------------------
+# Hatch — build + multi-environment task runner.
+# ---------------------------------------------------------------------------
+[tool.hatch.build.targets.wheel]
+packages = ["src/knovas_extract"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+  "src/",
+  "tests/",
+  "docs/",
+  "README.md",
+  "LICENSE",
+  "NOTICE",
+  "CHANGELOG.md",
+  "SECURITY.md",
+  "RELEASING.md",
+  "pyproject.toml",
+]
+exclude = [
+  "tests/spec/",          # spec corpus pulled at test time, not packaged
+  "tests/golden_corpus_pinned/",
+  ".github/",
+  ".hatch/",
+]
+
+# Default dev environment.
+[tool.hatch.envs.default]
+dependencies = [
+  "pytest >= 8.3",
+  "pytest-cov >= 5.0",
+  "pytest-socket >= 0.7.0",
+  "hypothesis >= 6.115",
+]
+[tool.hatch.envs.default.scripts]
+test = "pytest {args:tests}"
+
+# Lint + static type checking.
+[tool.hatch.envs.lint]
+detached = true
+dependencies = [
+  "ruff == 0.7.4",
+  "mypy == 1.13.0",
+  "pyright == 1.1.388",
+]
+[tool.hatch.envs.lint.scripts]
+all = ["ruff check src tests", "ruff format --check src tests", "mypy src", "pyright src"]
+fix = ["ruff check --fix src tests", "ruff format src tests"]
+
+# Security gates (Part 3 of /plans/our-client-asked-if-bright-pony.md).
+[tool.hatch.envs.sec]
+detached = true
+dependencies = [
+  "bandit[toml] == 1.7.10",
+  "semgrep == 1.95.0 ; sys_platform != 'win32'",
+  "pip-audit == 2.7.3",
+]
+[tool.hatch.envs.sec.scripts]
+bandit    = "bandit -r src -c pyproject.toml"
+semgrep   = "semgrep --config p/security-audit --config p/owasp-top-ten --error src"
+pip-audit = "pip-audit --strict --desc on"
+# osv-scanner is a Go binary; install separately or run via the Action.
+# sigstore + slsa-verifier likewise live in release.yml.
+all = ["bandit", "pip-audit"]
+
+# Golden corpus tests — pull the pinned spec, run the corpus.
+[tool.hatch.envs.golden]
+dependencies = [
+  "pytest >= 8.3",
+  "pytest-socket >= 0.7.0",
+  "rapidfuzz >= 3.10",
+  "jsonschema >= 4.23",
+  "PyYAML >= 6.0",
+]
+[tool.hatch.envs.golden.scripts]
+run = "pytest tests/golden {args:-v}"
+
+# Property tests — hypothesis-driven robustness.
+[tool.hatch.envs.property]
+dependencies = [
+  "pytest >= 8.3",
+  "pytest-socket >= 0.7.0",
+  "hypothesis >= 6.115",
+  "psutil >= 6.1",            # RSS measurement in leak tests
+]
+[tool.hatch.envs.property.scripts]
+run = "pytest tests/property {args:-v}"
+
+# Benchmarks.
+[tool.hatch.envs.bench]
+dependencies = [
+  "pytest >= 8.3",
+  "pytest-benchmark >= 5.0",
+]
+[tool.hatch.envs.bench.scripts]
+run = "pytest bench --benchmark-only --benchmark-json=.benchmarks/result.json {args}"
+
+# Fuzzing (atheris, Linux/macOS only).
+[tool.hatch.envs.fuzz]
+dependencies = [
+  "atheris >= 2.3.0 ; sys_platform != 'win32'",
+]
+[tool.hatch.envs.fuzz.scripts]
+txt = "python tests/fuzz/fuzz_txt.py -atheris_runs=10000 {args}"
+md  = "python tests/fuzz/fuzz_md.py  -atheris_runs=10000 {args}"
+
+# CI matrix.
+[[tool.hatch.envs.test.matrix]]
+python = ["3.11", "3.12", "3.13"]
+
+# ---------------------------------------------------------------------------
+# Tool configuration.
+# ---------------------------------------------------------------------------
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = [
+  "E",   # pycodestyle errors
+  "F",   # pyflakes
+  "I",   # isort
+  "B",   # bugbear
+  "UP",  # pyupgrade
+  "S",   # bandit-equivalent (security)
+  "SIM", # simplify
+  "C4",  # comprehensions
+  "RET", # return statements
+  "RUF", # ruff-specific
+]
+ignore = [
+  "S101",  # pytest uses asserts
+  "E501",  # line length handled by formatter
+]
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = ["S101", "S301", "S311"]  # asserts + pickle + random in tests OK
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+warn_unreachable = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+disallow_any_explicit = false      # too noisy with deserialization
+files = ["src"]
+
+[[tool.mypy.overrides]]
+# C-extension libs without stubs; ignore at import boundaries only.
+module = ["magic", "magic.*", "selectolax.*", "striprtf.*", "fitz.*", "extract_msg.*"]
+ignore_missing_imports = true
+
+[tool.pyright]
+include = ["src"]
+exclude = ["**/__pycache__", ".venv", ".hatch"]
+pythonVersion = "3.11"
+typeCheckingMode = "standard"
+reportMissingImports = "error"
+reportMissingTypeStubs = "warning"
+
+[tool.bandit]
+exclude_dirs = ["tests", ".venv", ".hatch"]
+skips = []  # do NOT skip anything by default; use # nosec with justification
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+addopts = [
+  "--strict-markers",
+  "--strict-config",
+  "--disable-socket",          # pytest-socket: no network in any test, ever
+  "--allow-unix-socket",       # pytest-xdist / asyncio internals need these
+  "-ra",
+]
+markers = [
+  "unit:         fast, no I/O, no fixtures",
+  "golden:       corpus contract tests; requires tests/spec/ available",
+  "property:     hypothesis robustness tests; may be slow",
+  "slow:         marked-slow tests; excluded from default runs",
+  "linux_only:   skipped on macOS / Windows",
+  "needs_pymupdf: skipped unless [pdf] extra is installed",
+]
+filterwarnings = [
+  "error",                                  # warnings are errors by default
+  "ignore::DeprecationWarning:jsonschema.*",
+]
+
+[tool.coverage.run]
+branch = true
+source = ["src/knovas_extract"]
+omit = [
+  "src/knovas_extract/cli.py",              # CLI thin wrapper; covered by smoke
+  "src/knovas_extract/extractors/*.py",     # 3rd-party-call dominated; covered by golden
+]
+
+[tool.coverage.report]
+fail_under = 95
+show_missing = true
+exclude_lines = [
+  "pragma: no cover",
+  "raise NotImplementedError",
+  "if TYPE_CHECKING:",
+  "if __name__ == .__main__.:",
+]

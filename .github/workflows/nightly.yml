@@ -1,0 +1,55 @@
+name: Nightly — ASan / mutation / soak
+
+# Heavy gates that don't run per PR. Surface regressions overnight.
+
+on:
+  schedule:
+    - cron: '0 3 * * *'           # daily 03:00 UTC
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  mutation:
+    name: mutation testing (mutmut)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    steps:
+      - uses: step-security/harden-runner@v2
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install hatch mutmut
+      - name: Mutate dispatch + normalize + errors + result
+        run: |
+          hatch env create
+          mutmut run --paths-to-mutate src/knovas_extract/dispatch.py,src/knovas_extract/normalize.py,src/knovas_extract/errors.py,src/knovas_extract/result.py
+      - name: Enforce >= 80% mutation score
+        run: |
+          KILLED=$(mutmut results | grep -E "killed" | awk '{print $NF}')
+          SURVIVED=$(mutmut results | grep -E "survived" | awk '{print $NF}')
+          SCORE=$(echo "scale=2; $KILLED * 100 / ($KILLED + $SURVIVED)" | bc)
+          echo "Mutation score: $SCORE%"
+          [ "$(echo "$SCORE >= 80" | bc)" = "1" ]
+
+  fuzz-long:
+    name: extended fuzz (30 min/target)
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install atheris && pip install -e .
+      - name: Fuzz txt (30 min)
+        run: timeout 1800 python tests/fuzz/fuzz_txt.py -atheris_runs=10000000 || [ $? -eq 124 ]
+      - name: Fuzz md (30 min)
+        run: timeout 1800 python tests/fuzz/fuzz_md.py -atheris_runs=10000000 || [ $? -eq 124 ]

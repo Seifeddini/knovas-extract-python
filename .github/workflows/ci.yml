@@ -1,0 +1,181 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# Default-deny permissions; individual jobs grant what they need.
+permissions: {}
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Lint + type check. Fast feedback; runs once.
+  # ---------------------------------------------------------------------------
+  lint:
+    name: lint + type
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: step-security/harden-runner@v2
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+      - run: pip install hatch
+      - run: hatch -e lint run all
+
+  # ---------------------------------------------------------------------------
+  # Unit + golden + property tests on the matrix.
+  # ---------------------------------------------------------------------------
+  test:
+    name: test (${{ matrix.python }} / ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ['3.11', '3.12', '3.13']
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: step-security/harden-runner@v2
+        if: runner.os == 'Linux'
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@v4
+
+      - name: Checkout sibling KnowledgeBase (for spec corpus)
+        uses: actions/checkout@v4
+        with:
+          repository: Seifeddini/KnowledgeBase
+          ref: develop
+          path: KnowledgeBase
+          lfs: true
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          cache: 'pip'
+
+      - name: Install hatch + project
+        run: |
+          pip install hatch
+          hatch env create
+
+      - name: Unit tests
+        env:
+          KNOVAS_EXTRACT_SPEC_DIR: ${{ github.workspace }}/KnowledgeBase/clients/extraction/spec
+        run: hatch run test -m unit -v
+
+      - name: Golden corpus tests (Phase 0: skipped if corpus is empty)
+        env:
+          KNOVAS_EXTRACT_SPEC_DIR: ${{ github.workspace }}/KnowledgeBase/clients/extraction/spec
+        run: hatch -e golden run run
+
+      - name: Property tests
+        run: hatch -e property run run
+
+  # ---------------------------------------------------------------------------
+  # Security gates. Required green to merge.
+  # ---------------------------------------------------------------------------
+  security:
+    name: security gates
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      security-events: write   # for SARIF upload
+    steps:
+      - uses: step-security/harden-runner@v2
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+      - run: pip install hatch
+      - name: Bandit
+        run: hatch -e sec run bandit
+      - name: Semgrep
+        run: hatch -e sec run semgrep
+      - name: pip-audit
+        run: hatch -e sec run pip-audit
+      - name: OSV Scanner
+        uses: google/osv-scanner-action/osv-scanner-action@v1.9.0
+        with:
+          scan-args: |-
+            -r
+            --skip-git
+            --lockfile=pyproject.toml
+            ./
+
+  codeql:
+    name: CodeQL
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: python
+          queries: security-and-quality
+      - uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:python"
+
+  # ---------------------------------------------------------------------------
+  # CIFuzz — 5 minutes of coverage-guided fuzzing per PR.
+  # ---------------------------------------------------------------------------
+  cifuzz:
+    name: CIFuzz (atheris, 5 min)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install atheris + project
+        run: |
+          pip install atheris
+          pip install -e .
+      - name: Fuzz txt extractor (60s)
+        run: timeout 60 python tests/fuzz/fuzz_txt.py -atheris_runs=10000 || [ $? -eq 124 ]
+      - name: Fuzz md extractor (60s)
+        run: timeout 60 python tests/fuzz/fuzz_md.py -atheris_runs=10000 || [ $? -eq 124 ]
+
+  # ---------------------------------------------------------------------------
+  # Secrets scan.
+  # ---------------------------------------------------------------------------
+  secrets:
+    name: secrets scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,0 +1,55 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.eggs/
+.installed.cfg
+
+# Virtual envs
+.venv/
+venv/
+.hatch/
+.python-version
+
+# Test / coverage
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.coverage
+.coverage.*
+htmlcov/
+.hypothesis/
+junit.xml
+
+# Bench
+.benchmarks/
+
+# Fuzz
+crash-*
+crash_*
+fuzz_corpus_minimized/
+
+# Spec corpus (consumed via submodule or download — never committed here)
+tests/spec/
+tests/golden_corpus_pinned/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Security scan artifacts
+sbom.cdx.json
+provenance.intoto.jsonl
+*.sig
+*.crt

@@ -1,0 +1,20 @@
+* text=auto
+
+# Force LF for code + config files (matches CI's expectations on Linux runners).
+*.py        text eol=lf
+*.pyi       text eol=lf
+*.toml      text eol=lf
+*.yaml      text eol=lf
+*.yml       text eol=lf
+*.json      text eol=lf
+*.md        text eol=lf
+*.txt       text eol=lf
+*.cfg       text eol=lf
+*.ini       text eol=lf
+LICENSE     text eol=lf
+NOTICE      text eol=lf
+CODEOWNERS  text eol=lf
+.gitignore  text eol=lf
+.gitattributes text eol=lf
+.editorconfig  text eol=lf
+.pre-commit-config.yaml text eol=lf

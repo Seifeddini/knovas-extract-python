@@ -1,0 +1,129 @@
+name: Release
+
+# Tag-triggered release: builds reproducible wheels, signs them with Sigstore,
+# generates SLSA L3 provenance + CycloneDX SBOM, publishes to PyPI via the
+# Trusted Publishers (OIDC) flow. NO long-lived secrets in this repo.
+#
+# Pre-flight: see RELEASING.md.
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  build:
+    name: Build reproducible wheels
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    outputs:
+      hashes: ${{ steps.hash.outputs.hashes }}
+    steps:
+      - uses: step-security/harden-runner@v2
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0          # for SOURCE_DATE_EPOCH
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install hatch + cyclonedx
+        run: pip install hatch cyclonedx-bom
+
+      - name: Build (reproducible)
+        env:
+          SOURCE_DATE_EPOCH: ${{ env.SOURCE_DATE_EPOCH }}
+        run: |
+          export SOURCE_DATE_EPOCH=$(git log -1 --pretty=%ct)
+          hatch build
+
+      - name: Generate SBOM
+        run: cyclonedx-py environment -o sbom.cdx.json
+
+      - name: Generate per-artifact hashes for SLSA
+        id: hash
+        run: |
+          cd dist
+          echo "hashes=$(sha256sum *.whl *.tar.gz | base64 -w0)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: |
+            dist/*.whl
+            dist/*.tar.gz
+            sbom.cdx.json
+
+  provenance:
+    name: SLSA L3 provenance
+    needs: build
+    permissions:
+      id-token: write
+      contents: write
+      actions: read
+    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v2.0.0
+    with:
+      base64-subjects: ${{ needs.build.outputs.hashes }}
+      provenance-name: provenance.intoto.jsonl
+      upload-assets: false        # we attach via release job below
+
+  sign:
+    name: Sign wheels with Sigstore
+    needs: [build, provenance]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      id-token: write             # OIDC for sigstore
+      contents: read
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+      - uses: sigstore/gh-action-sigstore-python@v3.0.0
+        with:
+          inputs: |
+            dist/*.whl
+            dist/*.tar.gz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-signed
+          path: dist/*
+
+  publish:
+    name: Publish to PyPI
+    needs: [sign, provenance]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      id-token: write             # OIDC for PyPI Trusted Publishers
+      contents: write             # for attaching to the release
+    environment:
+      name: pypi
+      url: https://pypi.org/p/knovas-extract
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist-signed
+          path: dist
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist
+          skip-existing: false
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*.whl
+            dist/*.tar.gz
+            dist/*.sigstore
+            sbom.cdx.json
+            provenance.intoto.jsonl
+          generate_release_notes: true
