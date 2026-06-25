@@ -63,6 +63,5 @@ def test_collapses_empty_pages_and_sections_to_null() -> None:
 @pytest.mark.unit
 def test_validates_against_spec_schema(sample_result: ExtractionResult, schema: dict) -> None:
     """sample_result must validate against the live spec/schema.json."""
-    from jsonschema import Draft202012Validator
-
-    Draft202012Validator(schema).validate(sample_result.to_dict())
+    jsonschema = pytest.importorskip("jsonschema")
+    jsonschema.Draft202012Validator(schema).validate(sample_result.to_dict())

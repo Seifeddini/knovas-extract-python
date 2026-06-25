@@ -40,10 +40,18 @@ _ERROR_CLASSES: dict[str, type[ExtractError]] = {
 }
 
 
-def _load_adversarial_manifest(spec_dir: Path) -> dict[str, dict]:
-    """Read corpus/adversarial entries from MANIFEST.yaml."""
-    import yaml
+def _load_adversarial_manifest(spec_dir: Path) -> dict[str, dict] | None:
+    """Read corpus/adversarial entries from MANIFEST.yaml.
 
+    Returns None when PyYAML is unavailable (e.g. minimal default test env
+    in CI's matrix — yaml only ships in the `golden` hatch env). The caller
+    handles None by emitting a no-fixtures parametrize so pytest collection
+    succeeds and the test cleanly skips.
+    """
+    try:
+        import yaml
+    except ImportError:
+        return None
     manifest = yaml.safe_load((spec_dir / "MANIFEST.yaml").read_text(encoding="utf-8"))
     return dict(manifest.get("adversarial") or {})
 
@@ -75,6 +83,9 @@ def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
         return
 
     manifest = _load_adversarial_manifest(spec_dir)
+    if manifest is None:
+        metafunc.parametrize("adversarial_pair", [], ids=["pyyaml-missing"])
+        return
     if not manifest:
         metafunc.parametrize("adversarial_pair", [], ids=["adversarial-empty"])
         return
