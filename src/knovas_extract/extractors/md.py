@@ -37,7 +37,7 @@ def _split_frontmatter(text: str) -> tuple[dict[str, object], str]:
         return {}, text
 
     try:
-        import frontmatter  # type: ignore[import-not-found]
+        import frontmatter
 
         post = frontmatter.loads(text)
         return dict(post.metadata or {}), post.content

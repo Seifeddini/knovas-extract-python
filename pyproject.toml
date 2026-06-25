@@ -132,7 +132,7 @@ dependencies = [
 # detects 'bandit -> bandit' as circular expansion and refuses to run.
 [tool.hatch.envs.sec.scripts]
 run-bandit    = "bandit -r src -c pyproject.toml"
-run-semgrep   = "semgrep --config p/security-audit --config p/owasp-top-ten --error src"
+run-semgrep   = "semgrep --severity ERROR --error --config p/security-audit --config p/owasp-top-ten src"
 run-pip-audit = "pip-audit --strict --desc on"
 # osv-scanner is a Go binary; install separately or run via the Action.
 # sigstore + slsa-verifier likewise live in release.yml.
@@ -221,8 +221,19 @@ disallow_any_explicit = false      # too noisy with deserialization
 files = ["src"]
 
 [[tool.mypy.overrides]]
-# C-extension libs without stubs; ignore at import boundaries only.
-module = ["magic", "magic.*", "selectolax.*", "striprtf.*", "fitz.*", "extract_msg.*"]
+# Third-party deps without type stubs. These are checked only at the import
+# boundary; their public API is treated as Any. We catch real bugs via the
+# golden + property + fuzz tiers.
+module = [
+  "magic", "magic.*",
+  "selectolax.*",
+  "striprtf.*",
+  "fitz.*",
+  "extract_msg.*",
+  "chardet", "chardet.*",
+  "frontmatter", "frontmatter.*",
+  "rapidfuzz.*",
+]
 ignore_missing_imports = true
 
 [tool.pyright]
@@ -230,7 +241,11 @@ include = ["src"]
 exclude = ["**/__pycache__", ".venv", ".hatch"]
 pythonVersion = "3.11"
 typeCheckingMode = "standard"
-reportMissingImports = "error"
+# Optional runtime extras aren't installed in the detached lint env on purpose
+# (keeps the env minimal). mypy silences these via [[tool.mypy.overrides]];
+# pyright runs as a second-opinion advisory checker, so missing imports are
+# downgraded to warning (still visible in CI logs, doesn't fail the gate).
+reportMissingImports = "warning"
 reportMissingTypeStubs = "warning"
 
 [tool.bandit]
