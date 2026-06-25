@@ -1,0 +1,52 @@
+# Dependabot — keeps deps current and surfaces CVEs.
+# Security updates run automatically once `Dependabot security updates` is
+# enabled in the repo's Code-security settings (see RELEASING.md / step 4b).
+#
+# Version bumps below are routine (non-CVE) PRs on the schedule.
+
+version: 2
+updates:
+  # Python runtime + dev deps declared in pyproject.toml.
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Zurich
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - python
+    commit-message:
+      prefix: "deps"
+      include: scope
+    groups:
+      # Bundle linter / type-checker bumps so we get one PR per week not five.
+      dev-tooling:
+        patterns:
+          - "ruff"
+          - "mypy"
+          - "pyright"
+          - "bandit*"
+          - "semgrep"
+          - "pip-audit"
+          - "pre-commit"
+      test-tooling:
+        patterns:
+          - "pytest*"
+          - "hypothesis"
+          - "rapidfuzz"
+
+  # Pinned GitHub Actions (we pin by SHA — Dependabot updates the SHA + comment).
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - github-actions
+    commit-message:
+      prefix: "ci"

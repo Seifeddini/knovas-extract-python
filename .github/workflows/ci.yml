@@ -79,7 +79,7 @@ jobs:
           KNOVAS_EXTRACT_SPEC_DIR: ${{ github.workspace }}/KnowledgeBase/clients/extraction/spec
         run: hatch run test -m unit -v
 
-      - name: Golden corpus tests (Phase 0: skipped if corpus is empty)
+      - name: "Golden corpus tests (Phase 0 — skipped if corpus is empty)"
         env:
           KNOVAS_EXTRACT_SPEC_DIR: ${{ github.workspace }}/KnowledgeBase/clients/extraction/spec
         run: hatch -e golden run run
