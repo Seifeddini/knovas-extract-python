@@ -7,7 +7,7 @@ build-backend = "hatchling.build"
 # ---------------------------------------------------------------------------
 [project]
 name = "knovas-extract"
-version = "0.1.1"
+version = "0.1.2"
 description = "Privacy-preserving, performant document extraction (text + metadata) for the Knovas Semantix platform. Python reference implementation."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -156,8 +156,9 @@ dependencies = [
 [tool.hatch.envs.golden.scripts]
 run = "pytest tests/golden {args:-v}"
 
-# Property tests — hypothesis-driven robustness.
+# Property tests — hypothesis-driven robustness + leak detection.
 [tool.hatch.envs.property]
+features = ["pdf", "docx", "html", "rtf", "msg", "md"]
 dependencies = [
   "pytest >= 8.3",
   "pytest-socket >= 0.7.0",

@@ -96,7 +96,13 @@ def test_fixture(fixture_pair: tuple[Path, Path]) -> None:
     fixture_path, expected_path = fixture_pair
 
     expected = json.loads(expected_path.read_text(encoding="utf-8"))
-    actual = extract(fixture_path).to_dict()
+    try:
+        actual = extract(fixture_path).to_dict()
+    except __import__("knovas_extract").errors.DependencyMissingError as exc:
+        # Format extra not installed in this hatch env — skip rather than
+        # fail. The dedicated `golden` env has features=[pdf,docx,...] so
+        # this only fires in the minimal `default` env.
+        pytest.skip(f"Format extra unavailable in this env: {exc}")
 
     # Source: hash / size / mime exact match.
     for k in ("mime_type", "sha256", "size_bytes"):

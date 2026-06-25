@@ -4,6 +4,44 @@ All notable changes documented here. Format: [Keep a Changelog](https://keepacha
 
 A **major** version bump matches the major of `spec_version` it conforms to.
 
+## [0.1.2] — 2026-06-25
+
+### Fixed
+- `dispatch._detect_mime` now prefers the filename extension over libmagic
+  when libmagic returns a generic MIME (`text/plain`, `application/zip`,
+  `text/xml`, `application/xml`, `application/octet-stream`). Fixes
+  libmagic-version-skew on macOS where some installs classify `.eml` as
+  `text/plain` (sending dispatch to the wrong extractor).
+- `dispatch.extract` now re-frames the late-stage `ImportError` an
+  extractor's lazy backend import can raise into `DependencyMissingError`,
+  keeping the "every public call returns `ExtractionResult` or raises a
+  subclass of `ExtractError`" contract honest in minimal-install envs.
+
+### Added
+- `tests/property/test_no_leaks.py` — extracts a synthetic per-format
+  payload set 200× and asserts RSS stays bounded (≤10 % growth + 30 MiB
+  slack). Marked `slow` + `linux_only`; runs in the `property` hatch env.
+- `extras/oss-fuzz/` — `project.yaml` + `Dockerfile` + `build.sh` ready
+  to copy into a `google/oss-fuzz` fork for continuous fuzzing (covers
+  all 7 atheris targets, seeded from the spec golden corpus).
+- `CONTRIBUTING.md` — engineering onboarding (already shipped in 0.1.1
+  branch but worth highlighting).
+
+### Internal
+- `tests/golden/test_corpus.py` + `test_adversarial.py` skip cleanly with
+  `pytest.skip` when a format extra isn't installed (rather than failing
+  on `DependencyMissingError`). Means `hatch run test` (default env)
+  passes against a real spec sibling without needing every backend.
+- `pyproject.toml::tool.hatch.envs.golden` now installs format extras so
+  the golden corpus actually validates output (was failing in CI
+  because no PyMuPDF/python-docx/etc. → DependencyMissingError on every
+  fixture).
+- `pyproject.toml::tool.hatch.envs.property` now installs format extras
+  too (for the new leak test).
+- `release.yml` — `actions/upload-artifact@v4` no longer nests `dist/`;
+  `sigstore/gh-action-sigstore-python` bumped to v3.4.0 (was the v0.1.0
+  blocker; same fix as 0.1.1).
+
 ## [0.1.1] — 2026-06-25
 
 ### Fixed

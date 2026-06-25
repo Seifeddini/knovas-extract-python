@@ -111,8 +111,11 @@ def test_adversarial_fixture(adversarial_pair: tuple[Path, str]) -> None:
     expected_cls = _ERROR_CLASSES.get(expected)
 
     if expected_cls is not None:
-        with pytest.raises(expected_cls):
-            extract(path)
+        try:
+            with pytest.raises(expected_cls):
+                extract(path)
+        except DependencyMissingError as exc:
+            pytest.skip(f"Format extra unavailable in this env: {exc}")
         return
 
     if expected == "warning":

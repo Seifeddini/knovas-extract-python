@@ -228,7 +228,26 @@ def extract(
     detected_mime = mime or _detect_mime(data, filename)
     extractor = _get_extractor(detected_mime)
 
-    result = extractor.extract(data, filename=filename, limits=limits)
+    # Extractors lazy-import their parser backends INSIDE their extract() method
+    # (so importing knovas_extract is cheap even with no extras installed). If
+    # the backend isn't installed at call time, an ImportError escapes the
+    # extractor and would break the contract — re-frame as DependencyMissingError.
+    try:
+        result = extractor.extract(data, filename=filename, limits=limits)
+    except ImportError as exc:
+        missing = getattr(exc, "name", "unknown")
+        extra_map = {
+            "fitz": "pdf",
+            "pymupdf": "pdf",
+            "docx": "docx",
+            "mammoth": "docx",
+            "extract_msg": "msg",
+            "selectolax": "html",
+            "striprtf": "rtf",
+            "frontmatter": "md",
+        }
+        extra = extra_map.get(missing, detected_mime.split("/")[-1])
+        raise DependencyMissingError(extra, missing) from exc
 
     # Defense-in-depth: enforce the source block matches what dispatch actually saw.
     # An extractor that overrides source.sha256/size_bytes/mime_type is buggy;
