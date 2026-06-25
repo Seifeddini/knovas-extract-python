@@ -55,9 +55,7 @@ def _resolve_spec_dir() -> Path | None:
     if os.environ.get("KNOVAS_EXTRACT_SPEC_DIR"):
         candidates.append(Path(os.environ["KNOVAS_EXTRACT_SPEC_DIR"]))
     here = Path(__file__).resolve().parent
-    candidates.append(
-        here.parent.parent.parent / "KnowledgeBase" / "clients" / "extraction" / "spec"
-    )
+    candidates.append(here.parent.parent.parent / "knovas-extract-spec")
     candidates.append(here.parent / "spec")
     return next((c for c in candidates if c.is_dir() and (c / "schema.json").is_file()), None)
 

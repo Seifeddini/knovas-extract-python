@@ -74,9 +74,7 @@ def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
     if os.environ.get("KNOVAS_EXTRACT_SPEC_DIR"):
         candidates.append(Path(os.environ["KNOVAS_EXTRACT_SPEC_DIR"]))
     here = Path(__file__).resolve().parent
-    candidates.append(
-        here.parent.parent.parent / "KnowledgeBase" / "clients" / "extraction" / "spec"
-    )
+    candidates.append(here.parent.parent.parent / "knovas-extract-spec")
     candidates.append(here.parent / "spec")
 
     spec_dir = next((c for c in candidates if c.is_dir() and (c / "schema.json").is_file()), None)

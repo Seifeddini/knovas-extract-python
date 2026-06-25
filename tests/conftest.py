@@ -18,12 +18,12 @@ SPEC_ENV = "KNOVAS_EXTRACT_SPEC_DIR"
 
 @pytest.fixture(scope="session")
 def spec_dir() -> Path:
-    """Locate clients/extraction/spec/ in the KnowledgeBase monorepo.
+    """Locate the knovas-extract-spec repo (or its checkout).
 
     Resolution order:
-    1. $KNOVAS_EXTRACT_SPEC_DIR (set this in CI to point at a checkout).
-    2. ../KnowledgeBase/clients/extraction/spec/ (sibling-dir dev layout).
-    3. ./tests/spec/ (submodule layout — production CI).
+    1. $KNOVAS_EXTRACT_SPEC_DIR (set in CI to point at a checkout).
+    2. ../knovas-extract-spec/ (sibling-dir dev layout — typical local setup).
+    3. ./tests/spec/ (submodule layout — alternative CI layout).
     4. Skip the test.
     """
     import os
@@ -32,7 +32,7 @@ def spec_dir() -> Path:
     if os.environ.get(SPEC_ENV):
         candidates.append(Path(os.environ[SPEC_ENV]))
     here = Path(__file__).resolve().parent
-    candidates.append(here.parent.parent / "KnowledgeBase" / "clients" / "extraction" / "spec")
+    candidates.append(here.parent.parent / "knovas-extract-spec")
     candidates.append(here / "spec")
 
     for c in candidates:
@@ -40,7 +40,8 @@ def spec_dir() -> Path:
             return c
 
     pytest.skip(
-        f"spec directory not found. Set ${SPEC_ENV} or run from a sibling-of-KnowledgeBase layout."
+        f"spec directory not found. Set ${SPEC_ENV} or clone knovas-extract-spec "
+        f"as a sibling of this repo."
     )
 
 

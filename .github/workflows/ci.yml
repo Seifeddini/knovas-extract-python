@@ -56,31 +56,26 @@ jobs:
           egress-policy: audit
       - uses: actions/checkout@v4
 
-      # Cross-repo checkout of the spec lives in the (private) KnowledgeBase
-      # monorepo. The default GITHUB_TOKEN can't read other repos. When a
-      # maintainer adds a PAT secret KNOWLEDGEBASE_TOKEN with read access, the
-      # spec is fetched and golden tests run with real fixtures. Without it,
-      # the checkout fails fast (continue-on-error) and the golden runner
-      # gracefully reports "no-spec-found" (see tests/golden/test_corpus.py).
-      #
-      # NOTE: `secrets.X` cannot be referenced in step-level `if:` (only in
-      # `with:`/`env:`/`run:`), so we pass it via `token:` — empty token causes
-      # actions/checkout to fail, swallowed by continue-on-error.
-      - name: Checkout sibling KnowledgeBase (for spec corpus)
-        id: kb-checkout
+      # Checkout the standalone spec repo for golden + adversarial corpus
+      # tests. When the spec is public this needs no token; if it's ever
+      # private, set SPEC_TOKEN to a PAT with read access. continue-on-error
+      # keeps the workflow alive when the spec is unreachable (the golden
+      # runner gracefully reports "no-spec-found" — see tests/golden/test_corpus.py).
+      - name: Checkout knovas-extract-spec (for corpus)
+        id: spec-checkout
         uses: actions/checkout@v4
         with:
-          repository: Seifeddini/KnowledgeBase
-          ref: develop
-          path: KnowledgeBase
+          repository: Seifeddini/knovas-extract-spec
+          ref: main
+          path: knovas-extract-spec
           lfs: true
-          token: ${{ secrets.KNOWLEDGEBASE_TOKEN }}
+          token: ${{ secrets.SPEC_TOKEN || secrets.GITHUB_TOKEN }}
         continue-on-error: true
 
       - name: Export KNOVAS_EXTRACT_SPEC_DIR if spec was fetched
-        if: steps.kb-checkout.outcome == 'success'
+        if: steps.spec-checkout.outcome == 'success'
         shell: bash
-        run: echo "KNOVAS_EXTRACT_SPEC_DIR=${{ github.workspace }}/KnowledgeBase/clients/extraction/spec" >> "$GITHUB_ENV"
+        run: echo "KNOVAS_EXTRACT_SPEC_DIR=${{ github.workspace }}/knovas-extract-spec" >> "$GITHUB_ENV"
 
       - uses: actions/setup-python@v5
         with:
