@@ -57,7 +57,7 @@ def _canon(s: str) -> str:
     return s.strip()
 
 
-def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:  # noqa: D401
+def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
     """Collect-time parametrization from the spec corpus.
 
     Runs in fixture-discovery order: `spec_dir` fixture must resolve first

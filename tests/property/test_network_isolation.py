@@ -17,12 +17,16 @@ pytestmark = pytest.mark.property
 
 @pytest.mark.unit
 def test_socket_is_disabled_in_tests() -> None:
-    """Sanity: confirm pytest-socket actually blocks socket()."""
+    """Sanity: confirm pytest-socket actually blocks socket().
+
+    pytest-socket signals via a UserWarning (subclass varies across versions);
+    pyproject.toml's `filterwarnings = "error"` turns it into a hard failure
+    at the call site. We accept any of the documented signals.
+    """
     import socket
 
-    with pytest.raises(Exception):  # SocketBlockedError, subclass of Exception
-        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        s.connect(("example.com", 80))
+    with pytest.raises((Warning, OSError)):
+        socket.socket(socket.AF_INET, socket.SOCK_STREAM).connect(("example.com", 80))
 
 
 @pytest.mark.unit

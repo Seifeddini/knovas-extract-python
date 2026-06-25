@@ -10,9 +10,9 @@ We feed random bytes / mutated valid inputs and assert these invariants hold.
 """
 from __future__ import annotations
 
+import pytest
 from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
-import pytest
 
 from knovas_extract import ExtractionResult, extract
 from knovas_extract.errors import ExtractError

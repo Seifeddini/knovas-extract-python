@@ -16,14 +16,26 @@ from knovas_extract.result import ExtractionResult, Limits, Metadata
 
 
 def _decode(data: bytes) -> tuple[str, str | None]:
-    """Return (text, declared_charset). Best-effort encoding detection."""
+    """Return (text, declared_charset). Best-effort encoding detection.
+
+    Any decoder failure on declared-BOM inputs (truncated UTF-16, invalid
+    UTF-8, etc.) is surfaced as CorruptDocumentError — never an untyped
+    UnicodeDecodeError.
+    """
     # Try UTF-8/16 BOMs first — cheap and unambiguous.
-    if data.startswith(b"\xef\xbb\xbf"):
-        return data[3:].decode("utf-8"), "utf-8"
-    if data.startswith(b"\xff\xfe"):
-        return data[2:].decode("utf-16-le"), "utf-16-le"
-    if data.startswith(b"\xfe\xff"):
-        return data[2:].decode("utf-16-be"), "utf-16-be"
+    bom_cases: list[tuple[bytes, str, int]] = [
+        (b"\xef\xbb\xbf", "utf-8",    3),
+        (b"\xff\xfe",     "utf-16-le", 2),
+        (b"\xfe\xff",     "utf-16-be", 2),
+    ]
+    for prefix, enc, strip in bom_cases:
+        if data.startswith(prefix):
+            try:
+                return data[strip:].decode(enc), enc
+            except UnicodeDecodeError as exc:
+                raise CorruptDocumentError(
+                    f"input claims BOM for {enc!r} but bytes are not valid: {exc}"
+                ) from exc
 
     # Try strict UTF-8 (the vast majority case).
     try:
@@ -33,7 +45,7 @@ def _decode(data: bytes) -> tuple[str, str | None]:
 
     # chardet fallback. Always optional dep handled gracefully.
     try:
-        import chardet  # type: ignore[import-not-found]
+        import chardet
 
         guess = chardet.detect(data)
         enc = (guess.get("encoding") or "").lower() or "utf-8"

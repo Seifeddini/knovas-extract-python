@@ -56,13 +56,27 @@ jobs:
           egress-policy: audit
       - uses: actions/checkout@v4
 
+      # Cross-repo checkout of the spec lives in the (private) KnowledgeBase
+      # monorepo. The default GITHUB_TOKEN can't read other repos, so this step
+      # is best-effort: when a maintainer adds a PAT secret KNOWLEDGEBASE_TOKEN
+      # with read access, the spec is available and golden tests run; otherwise
+      # the step is skipped and golden tests gracefully report "no-spec-found".
       - name: Checkout sibling KnowledgeBase (for spec corpus)
+        id: kb-checkout
+        if: ${{ secrets.KNOWLEDGEBASE_TOKEN != '' }}
         uses: actions/checkout@v4
         with:
           repository: Seifeddini/KnowledgeBase
           ref: develop
           path: KnowledgeBase
           lfs: true
+          token: ${{ secrets.KNOWLEDGEBASE_TOKEN }}
+        continue-on-error: true
+
+      - name: Export KNOVAS_EXTRACT_SPEC_DIR if spec was fetched
+        if: steps.kb-checkout.outcome == 'success'
+        shell: bash
+        run: echo "KNOVAS_EXTRACT_SPEC_DIR=${{ github.workspace }}/KnowledgeBase/clients/extraction/spec" >> "$GITHUB_ENV"
 
       - uses: actions/setup-python@v5
         with:
@@ -75,13 +89,9 @@ jobs:
           hatch env create
 
       - name: Unit tests
-        env:
-          KNOVAS_EXTRACT_SPEC_DIR: ${{ github.workspace }}/KnowledgeBase/clients/extraction/spec
         run: hatch run test -m unit -v
 
-      - name: "Golden corpus tests (Phase 0 — skipped if corpus is empty)"
-        env:
-          KNOVAS_EXTRACT_SPEC_DIR: ${{ github.workspace }}/KnowledgeBase/clients/extraction/spec
+      - name: "Golden corpus tests (Phase 0 — skipped if corpus is empty or absent)"
         run: hatch -e golden run run
 
       - name: Property tests
@@ -156,12 +166,40 @@ jobs:
           python-version: '3.12'
       - name: Install atheris + project
         run: |
+          # libmagic1 keeps python-magic functional inside the fuzz target.
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends libmagic1
           pip install atheris
           pip install -e .
+
+      # Each target runs for 60 seconds. Exit codes:
+      #   0   = atheris completed all runs without crash
+      #   124 = killed by `timeout` after 60s without crash (also success)
+      #   137 = SIGKILL (CI runner timeout)
+      #   any other nonzero = atheris found a crash → step fails (correct)
       - name: Fuzz txt extractor (60s)
-        run: timeout 60 python tests/fuzz/fuzz_txt.py -atheris_runs=10000 || [ $? -eq 124 ]
+        run: |
+          set +e
+          timeout --preserve-status 60 python tests/fuzz/fuzz_txt.py -atheris_runs=10000000
+          rc=$?
+          if [ $rc -eq 0 ] || [ $rc -eq 124 ] || [ $rc -eq 137 ] || [ $rc -eq 143 ]; then
+            echo "atheris (txt) ran 60s without crash (exit $rc)"
+            exit 0
+          fi
+          echo "::error::atheris (txt) found a crash (exit $rc)"
+          exit $rc
+
       - name: Fuzz md extractor (60s)
-        run: timeout 60 python tests/fuzz/fuzz_md.py -atheris_runs=10000 || [ $? -eq 124 ]
+        run: |
+          set +e
+          timeout --preserve-status 60 python tests/fuzz/fuzz_md.py -atheris_runs=10000000
+          rc=$?
+          if [ $rc -eq 0 ] || [ $rc -eq 124 ] || [ $rc -eq 137 ] || [ $rc -eq 143 ]; then
+            echo "atheris (md) ran 60s without crash (exit $rc)"
+            exit 0
+          fi
+          echo "::error::atheris (md) found a crash (exit $rc)"
+          exit $rc
 
   # ---------------------------------------------------------------------------
   # Secrets scan.

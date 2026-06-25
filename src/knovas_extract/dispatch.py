@@ -14,11 +14,14 @@ header-first detection.
 """
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import os
 from pathlib import Path
 from typing import Union
 
+from knovas_extract._version import SPEC_VERSION as _SPEC_VERSION
+from knovas_extract._version import __version__ as _PACKAGE_VERSION
 from knovas_extract.errors import (
     DependencyMissingError,
     ResourceExhaustedError,
@@ -31,6 +34,8 @@ from knovas_extract.result import (
     Extractor,
     Limits,
     Metadata,
+    Page,
+    Section,
     Source,
 )
 
@@ -72,7 +77,7 @@ InputT = Union[str, "os.PathLike[str]", bytes, bytearray, memoryview]
 
 def _read_input(input: InputT, limits: Limits) -> tuple[bytes, str | None]:
     """Return (bytes, filename-or-None). Enforces max_input_bytes."""
-    if isinstance(input, (bytes, bytearray, memoryview)):
+    if isinstance(input, bytes | bytearray | memoryview):
         data = bytes(input)
         filename = None
     else:
@@ -99,16 +104,17 @@ def _detect_mime(data: bytes, filename: str | None) -> str:
     libmagic is optional — if it's unavailable, fall back to a small
     header-byte sniff and the extension table.
     """
-    # 1. libmagic (preferred).
-    try:
-        import magic  # type: ignore[import-not-found]
+    # 1. libmagic (preferred). Catches both import errors and runtime errors
+    # (libmagic system library missing on minimal containers, non-str under
+    # unusual encoding conditions, etc.). All are non-fatal — we fall through
+    # to the built-in header sniff in step 2.
+    with contextlib.suppress(Exception):
+        import magic
 
         # mime=True forces RFC-style MIME string output.
-        mime = magic.from_buffer(data[: 1 << 13], mime=True)
+        mime: str = magic.from_buffer(data[: 1 << 13], mime=True)
         if mime and mime != "application/octet-stream":
             return mime
-    except ImportError:
-        pass
 
     # 2. Tiny built-in header sniff for common formats (covers test paths
     # where python-magic isn't installed).
@@ -214,10 +220,6 @@ def extract(
     return result
 
 
-from knovas_extract._version import SPEC_VERSION as _SPEC_VERSION
-from knovas_extract._version import __version__ as _PACKAGE_VERSION
-
-
 # Re-export the canonical "empty" result builder so extractors can start from a
 # known-good baseline.
 def make_result(
@@ -228,8 +230,8 @@ def make_result(
     size_bytes: int,
     filename: str | None = None,
     metadata: Metadata | None = None,
-    pages: list | None = None,
-    sections: list | None = None,
+    pages: list[Page] | None = None,
+    sections: list[Section] | None = None,
     warnings: list[str] | None = None,
 ) -> ExtractionResult:
     return ExtractionResult(

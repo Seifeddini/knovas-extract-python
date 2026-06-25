@@ -1,9 +1,6 @@
 """Unit tests for the ExtractionResult dataclass — round-trip via JSON Schema."""
 from __future__ import annotations
 
-import json
-from pathlib import Path
-
 import pytest
 
 from knovas_extract.result import (

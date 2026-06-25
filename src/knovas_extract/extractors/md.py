@@ -25,7 +25,7 @@ _HEADING = re.compile(r"^(#{1,6})\s+(.+?)\s*#*\s*$", re.MULTILINE)
 _PROMOTED_KEYS = {"title", "author", "language", "date", "created", "modified"}
 
 
-def _split_frontmatter(text: str) -> tuple[dict, str]:
+def _split_frontmatter(text: str) -> tuple[dict[str, object], str]:
     """If text starts with '---\\nKEY: VALUE\\n---\\n', return (parsed-dict, body).
 
     Uses python-frontmatter if available; otherwise a minimal in-line parser
@@ -49,7 +49,7 @@ def _split_frontmatter(text: str) -> tuple[dict, str]:
         return {}, text
     block = text[4:end]
     body = text[end + 5 :]
-    meta: dict[str, str] = {}
+    meta: dict[str, object] = {}
     for line in block.splitlines():
         if ":" in line:
             k, _, v = line.partition(":")
@@ -119,7 +119,7 @@ class MdExtractor(IExtractor):
                 promoted[kl] = str(v) if v is not None else None
             else:
                 extra[f"md:{kl}"] = (
-                    v if isinstance(v, (str, int, float, bool, type(None))) else str(v)
+                    v if isinstance(v, str | int | float | bool | type(None)) else str(v)
                 )
 
         metadata = Metadata(

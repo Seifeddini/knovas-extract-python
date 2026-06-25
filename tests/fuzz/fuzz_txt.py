@@ -20,6 +20,8 @@ def main() -> None:
         print("atheris not installed; install with `pip install atheris`.", file=sys.stderr)
         sys.exit(1)
 
+    import contextlib
+
     from knovas_extract import extract
     from knovas_extract.errors import ExtractError
     from knovas_extract.result import Limits
@@ -27,10 +29,8 @@ def main() -> None:
     LIMITS = Limits(max_input_bytes=1 << 20, max_text_bytes=1 << 20)
 
     def TestOneInput(data: bytes) -> None:
-        try:
+        with contextlib.suppress(ExtractError):
             extract(data, mime="text/plain", limits=LIMITS)
-        except ExtractError:
-            pass  # expected typed errors
 
     atheris.Setup(sys.argv, TestOneInput)
     atheris.Fuzz()
