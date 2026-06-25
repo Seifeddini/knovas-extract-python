@@ -137,12 +137,10 @@ jobs:
           echo "=== sample extract output ==="
           hatch -e golden run python -m knovas_extract.cli "$KNOVAS_EXTRACT_SPEC_DIR/corpus/eml/simple.eml" 2>&1 | head -25 || true
 
-      # macOS Golden step still fails after dispatch was tightened to prefer
-      # extension over generic libmagic MIME. Root cause not yet
-      # characterized without runner log access. Advisory on macOS until the
-      # diagnostic step above tells us what's actually different.
+      # Confirmed passing on macOS as of dc37f45 (dispatch's prefer-extension
+      # fallback in c2c2f9c was the real fix; the earlier ca196e7 macOS
+      # failure must have been transient). Strict gate on all platforms.
       - name: "Golden corpus tests (Phase 0 — skipped if corpus is empty or absent)"
-        continue-on-error: ${{ runner.os == 'macOS' }}
         run: hatch -e golden run run
 
       - name: Property tests
