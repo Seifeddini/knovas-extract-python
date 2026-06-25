@@ -27,7 +27,7 @@ jobs:
       - uses: step-security/harden-runner@v2
         with:
           egress-policy: audit
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -54,7 +54,7 @@ jobs:
         if: runner.os == 'Linux'
         with:
           egress-policy: audit
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # Checkout the standalone spec repo for golden + adversarial corpus
       # tests. When the spec is public this needs no token; if it's ever
@@ -63,7 +63,7 @@ jobs:
       # runner gracefully reports "no-spec-found" — see tests/golden/test_corpus.py).
       - name: Checkout knovas-extract-spec (for corpus)
         id: spec-checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: Seifeddini/knovas-extract-spec
           ref: main
@@ -130,7 +130,7 @@ jobs:
       - uses: step-security/harden-runner@v2
         with:
           egress-policy: audit
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -167,7 +167,7 @@ jobs:
       security-events: write
       actions: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: github/codeql-action/init@v3
         with:
           languages: python
@@ -192,7 +192,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -247,7 +247,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - uses: gitleaks/gitleaks-action@v2
