@@ -23,7 +23,8 @@ import email
 import email.policy
 import hashlib
 import re
-from typing import ClassVar
+from email.message import EmailMessage
+from typing import ClassVar, cast
 
 from knovas_extract.dispatch import MIME_REGISTRY, make_result
 from knovas_extract.errors import CorruptDocumentError, ResourceExhaustedError
@@ -41,7 +42,7 @@ def _strip_html(s: str) -> str:
     return _WS.sub(" ", s).strip()
 
 
-def _safe_header(msg: email.message.EmailMessage, name: str) -> str | None:
+def _safe_header(msg: EmailMessage, name: str) -> str | None:
     """Decoded header string, or None."""
     v = msg.get(name)
     if v is None:
@@ -53,7 +54,7 @@ def _safe_header(msg: email.message.EmailMessage, name: str) -> str | None:
     return s or None
 
 
-def _extract_body(msg: email.message.EmailMessage) -> tuple[str, str]:
+def _extract_body(msg: EmailMessage) -> tuple[str, str]:
     """Return (text, source) where source is 'text/plain' or 'text/html' or ''."""
     if msg.is_multipart():
         # Prefer text/plain.
@@ -75,7 +76,7 @@ def _extract_body(msg: email.message.EmailMessage) -> tuple[str, str]:
     return str(payload), content_type
 
 
-def _collect_attachments(msg: email.message.EmailMessage) -> list[dict[str, str | int | None]]:
+def _collect_attachments(msg: EmailMessage) -> list[dict[str, str | int | None]]:
     out: list[dict[str, str | int | None]] = []
     if not msg.is_multipart():
         return out
@@ -111,7 +112,15 @@ class EmlExtractor(IExtractor):
             raise ResourceExhaustedError("input size", limits.max_input_bytes, observed=len(data))
 
         try:
-            msg = email.message_from_bytes(data, policy=email.policy.default)
+            # email.policy.default returns an EmailMessage at runtime; the
+            # stdlib stubs declare the older Message[str, str] return type,
+            # which doesn't expose .get_body / .iter_attachments. Cast once.
+            msg = cast(
+                "EmailMessage",
+                # email.policy.default has narrowed typing in recent stubs;
+                # message_from_bytes still expects the wider Policy[Message].
+                email.message_from_bytes(data, policy=email.policy.default),  # pyright: ignore[reportArgumentType]
+            )
         except Exception as exc:
             raise CorruptDocumentError(f"EML parse failed: {exc}") from exc
 
@@ -152,7 +161,7 @@ class EmlExtractor(IExtractor):
             # schema field, so we keep extra values as scalars.
             extra["eml:has_attachments"] = True
             extra["eml:attachment_count"] = len(attachments)
-            names = ",".join(a.get("name") or "<unnamed>" for a in attachments)
+            names = ",".join(str(a.get("name") or "<unnamed>") for a in attachments)
             extra["eml:attachment_names"] = names
 
         warnings: list[str] = []

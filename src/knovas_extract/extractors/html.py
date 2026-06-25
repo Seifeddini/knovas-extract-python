@@ -23,7 +23,7 @@ from __future__ import annotations
 
 import hashlib
 import re
-from typing import ClassVar, cast
+from typing import Any, ClassVar
 
 from knovas_extract.dispatch import MIME_REGISTRY, make_result
 from knovas_extract.errors import CorruptDocumentError, ResourceExhaustedError
@@ -35,7 +35,9 @@ from knovas_extract.result import ExtractionResult, Limits, Metadata, Section
 _SCRIPT_STYLE = re.compile(r"<(script|style)\b[^>]*>.*?</\1>", re.IGNORECASE | re.DOTALL)
 
 
-def _extract_html_metadata(tree, raw_text: str) -> dict[str, str | None]:
+def _extract_html_metadata(tree: Any) -> dict[str, str | None]:
+    # selectolax HTMLParser has no type stubs; `tree: Any` preserves the
+    # css_first/css attribute access under mypy strict.
     """Pull title + selected <meta> fields. Always returns a dict (possibly all None)."""
     meta: dict[str, str | None] = {
         "title": None,
@@ -100,7 +102,7 @@ def _extract_html_sections(html: str) -> list[Section]:
     body = tree.body
     if body is None:
         return []
-    body_text = cast("str", body.text(separator="\n"))
+    body_text = body.text(separator="\n")
 
     found: list[tuple[str, int, int]] = []  # (heading, level, start_index)
     cursor = 0
@@ -163,13 +165,13 @@ class HtmlExtractor(IExtractor):
         # corpus expects it.
         cleaned = _SCRIPT_STYLE.sub("", raw_text)
         body_tree = HTMLParser(cleaned)
-        body = cast("str", body_tree.body.text(separator="\n") if body_tree.body else "")
+        body = body_tree.body.text(separator="\n") if body_tree.body else ""
         text = canonicalize_text(body)
 
         if len(text.encode("utf-8")) > limits.max_text_bytes:
             raise ResourceExhaustedError("text size", limits.max_text_bytes, observed=len(text))
 
-        meta_raw = _extract_html_metadata(tree, raw_text)
+        meta_raw = _extract_html_metadata(tree)
         sections = _extract_html_sections(cleaned)
 
         extra: dict[str, str | int | float | bool | None] = {}

@@ -59,7 +59,7 @@ class RtfExtractor(IExtractor):
         from striprtf.striprtf import rtf_to_text
 
         try:
-            stripped = rtf_to_text(raw_text, errors="ignore")
+            stripped = rtf_to_text(raw_text, errors="ignore")  # type: ignore[no-untyped-call]
         except Exception as exc:
             raise CorruptDocumentError(f"RTF parse failed: {exc}") from exc
 

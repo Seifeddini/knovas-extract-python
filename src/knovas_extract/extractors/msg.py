@@ -22,7 +22,7 @@ import hashlib
 import re
 import tempfile
 from pathlib import Path
-from typing import ClassVar
+from typing import Any, ClassVar
 
 from knovas_extract.dispatch import MIME_REGISTRY, make_result
 from knovas_extract.errors import CorruptDocumentError, ResourceExhaustedError
@@ -68,7 +68,11 @@ class MsgExtractor(IExtractor):
 
         try:
             try:
-                msg = extract_msg.openMsg(str(tmp_path))
+                # extract-msg has no type stubs; openMsg returns a polymorphic
+                # MSGFile subclass whose body/subject/sender/etc. attributes
+                # are not declared on the base class. Typing as Any keeps the
+                # rest of this function readable.
+                msg: Any = extract_msg.openMsg(str(tmp_path))
             except Exception as exc:
                 raise CorruptDocumentError(f"MSG parse failed: {exc}") from exc
 
@@ -91,7 +95,7 @@ class MsgExtractor(IExtractor):
                         try:
                             from striprtf.striprtf import rtf_to_text
 
-                            body = rtf_to_text(
+                            body = rtf_to_text(  # type: ignore[no-untyped-call]
                                 rtf_body.decode("latin-1", errors="replace")
                                 if isinstance(rtf_body, bytes)
                                 else rtf_body,
