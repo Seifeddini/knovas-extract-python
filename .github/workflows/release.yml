@@ -92,7 +92,7 @@ jobs:
       contents: read
     steps:
       - name: Download wheels
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: dist
           path: dist
@@ -124,12 +124,12 @@ jobs:
       url: https://pypi.org/p/knovas-extract
     steps:
       - name: Download signed wheels
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: dist-signed
           path: dist
       - name: Download SBOM
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: sbom
           path: .
