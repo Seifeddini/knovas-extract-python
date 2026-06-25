@@ -57,13 +57,17 @@ jobs:
       - uses: actions/checkout@v4
 
       # Cross-repo checkout of the spec lives in the (private) KnowledgeBase
-      # monorepo. The default GITHUB_TOKEN can't read other repos, so this step
-      # is best-effort: when a maintainer adds a PAT secret KNOWLEDGEBASE_TOKEN
-      # with read access, the spec is available and golden tests run; otherwise
-      # the step is skipped and golden tests gracefully report "no-spec-found".
+      # monorepo. The default GITHUB_TOKEN can't read other repos. When a
+      # maintainer adds a PAT secret KNOWLEDGEBASE_TOKEN with read access, the
+      # spec is fetched and golden tests run with real fixtures. Without it,
+      # the checkout fails fast (continue-on-error) and the golden runner
+      # gracefully reports "no-spec-found" (see tests/golden/test_corpus.py).
+      #
+      # NOTE: `secrets.X` cannot be referenced in step-level `if:` (only in
+      # `with:`/`env:`/`run:`), so we pass it via `token:` — empty token causes
+      # actions/checkout to fail, swallowed by continue-on-error.
       - name: Checkout sibling KnowledgeBase (for spec corpus)
         id: kb-checkout
-        if: ${{ secrets.KNOWLEDGEBASE_TOKEN != '' }}
         uses: actions/checkout@v4
         with:
           repository: Seifeddini/KnowledgeBase
