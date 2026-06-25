@@ -66,7 +66,9 @@ _LAZY_LOADERS: dict[str, str] = {
     "application/pdf": "knovas_extract.extractors.pdf",
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "knovas_extract.extractors.docx",
     "text/html": "knovas_extract.extractors.html",
+    "application/xhtml+xml": "knovas_extract.extractors.html",
     "application/rtf": "knovas_extract.extractors.rtf",
+    "text/rtf": "knovas_extract.extractors.rtf",
     "message/rfc822": "knovas_extract.extractors.eml",
     "application/vnd.ms-outlook": "knovas_extract.extractors.msg",
 }
@@ -113,12 +115,13 @@ def _detect_mime(data: bytes, filename: str | None) -> str:
         if m and m != "application/octet-stream":
             libmagic_mime = m
 
-    # Office Open XML (DOCX/XLSX/PPTX) is structurally a ZIP. libmagic
-    # reports 'application/zip' for *every* DOCX unless the system has the
-    # office-specific magic patterns installed. If the filename gives us a
-    # more specific subtype, prefer it. (We never trust the filename when
-    # libmagic returned a NON-zip answer.)
-    if libmagic_mime == "application/zip" and filename:
+    # libmagic over-classifies several container formats: Office Open XML
+    # (DOCX/XLSX/PPTX) is reported as application/zip; HTML with an XML
+    # prologue is reported as text/xml. In those cases the filename
+    # extension is more informative — prefer it. We never trust the
+    # filename when libmagic returned a content-specific answer.
+    _CONTAINER_MIMES = {"application/zip", "text/xml", "application/xml"}
+    if libmagic_mime in _CONTAINER_MIMES and filename:
         ext = Path(filename).suffix.lower()
         if ext in EXT_REGISTRY:
             return EXT_REGISTRY[ext]

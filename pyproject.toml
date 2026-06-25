@@ -208,8 +208,10 @@ select = [
   "RUF", # ruff-specific
 ]
 ignore = [
-  "S101",  # pytest uses asserts
-  "E501",  # line length handled by formatter
+  "S101",   # pytest uses asserts
+  "E501",   # line length handled by formatter
+  "RUF002", # ambiguous unicode in docstrings — en dash / × used typographically on purpose
+  "RUF003", # same, in comments
 ]
 [tool.ruff.lint.per-file-ignores]
 "tests/**/*.py" = ["S101", "S301", "S311"]  # asserts + pickle + random in tests OK
