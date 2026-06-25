@@ -39,8 +39,6 @@ jobs:
         run: pip install hatch cyclonedx-bom
 
       - name: Build (reproducible)
-        env:
-          SOURCE_DATE_EPOCH: ${{ env.SOURCE_DATE_EPOCH }}
         run: |
           export SOURCE_DATE_EPOCH=$(git log -1 --pretty=%ct)
           hatch build
@@ -54,13 +52,22 @@ jobs:
           cd dist
           echo "hashes=$(sha256sum *.whl *.tar.gz | base64 -w0)" >> "$GITHUB_OUTPUT"
 
-      - uses: actions/upload-artifact@v4
+      # Upload `dist/` as its own artifact so download lands files at dist/*
+      # (NOT dist/dist/*) — previously the multi-path upload nested the
+      # contents one level too deep and broke sigstore's `dist/*.whl` glob.
+      - name: Upload wheels artifact
+        uses: actions/upload-artifact@v4
         with:
           name: dist
-          path: |
-            dist/*.whl
-            dist/*.tar.gz
-            sbom.cdx.json
+          path: dist/
+          if-no-files-found: error
+
+      - name: Upload SBOM artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: sbom.cdx.json
+          if-no-files-found: error
 
   provenance:
     name: SLSA L3 provenance
@@ -84,19 +91,25 @@ jobs:
       id-token: write             # OIDC for sigstore
       contents: read
     steps:
-      - uses: actions/download-artifact@v4
+      - name: Download wheels
+        uses: actions/download-artifact@v4
         with:
           name: dist
           path: dist
-      - uses: sigstore/gh-action-sigstore-python@v3.0.0
+      - name: List downloaded wheels (debug)
+        run: ls -la dist/
+      - name: Sigstore-sign every distribution artifact
+        uses: sigstore/gh-action-sigstore-python@v3.4.0
         with:
           inputs: |
-            dist/*.whl
-            dist/*.tar.gz
-      - uses: actions/upload-artifact@v4
+            ./dist/*.whl
+            ./dist/*.tar.gz
+      - name: Upload signed bundle
+        uses: actions/upload-artifact@v4
         with:
           name: dist-signed
-          path: dist/*
+          path: dist/
+          if-no-files-found: error
 
   publish:
     name: Publish to PyPI
@@ -110,20 +123,35 @@ jobs:
       name: pypi
       url: https://pypi.org/p/knovas-extract
     steps:
-      - uses: actions/download-artifact@v4
+      - name: Download signed wheels
+        uses: actions/download-artifact@v4
         with:
           name: dist-signed
           path: dist
-      - uses: pypa/gh-action-pypi-publish@release/v1
+      - name: Download SBOM
+        uses: actions/download-artifact@v4
         with:
-          packages-dir: dist
+          name: sbom
+          path: .
+      # PyPI rejects unknown file types in packages-dir — separate the
+      # distributions (which PyPI publishes) from the signing/SBOM bundle
+      # (which we attach to the GH Release).
+      - name: Stage distributions for PyPI
+        run: |
+          mkdir -p to-pypi
+          cp dist/*.whl dist/*.tar.gz to-pypi/
+          ls -la to-pypi/
+      - name: Publish to PyPI (Trusted Publisher OIDC)
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: to-pypi
           skip-existing: false
-      - uses: softprops/action-gh-release@v2
+      - name: Attach artifacts to GH Release
+        uses: softprops/action-gh-release@v2
         with:
           files: |
             dist/*.whl
             dist/*.tar.gz
-            dist/*.sigstore
+            dist/*.sigstore*
             sbom.cdx.json
-            provenance.intoto.jsonl
           generate_release_notes: true

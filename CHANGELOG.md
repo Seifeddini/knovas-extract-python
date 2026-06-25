@@ -4,6 +4,17 @@ All notable changes documented here. Format: [Keep a Changelog](https://keepacha
 
 A **major** version bump matches the major of `spec_version` it conforms to.
 
+## [0.1.1] — 2026-06-25
+
+### Fixed
+- `release.yml`: the v0.1.0 tag fired the release workflow but the Sign job
+  failed because `actions/upload-artifact@v4` with a multi-path config
+  nested `dist/` inside itself (`dist/dist/*.whl`). Refactored to upload
+  `dist/` as its own artifact (downloads land at `dist/*`) and the SBOM
+  as a separate `sbom` artifact. Bumped `sigstore/gh-action-sigstore-python`
+  to v3.4.0. Same fix unblocks the Publish-to-PyPI step. No code changes
+  vs 0.1.0 — wheel contents are identical except for the version string.
+
 ## [0.1.0] — 2026-06-25
 
 First public release. Conforms to `spec_version = 1.0.0`.
