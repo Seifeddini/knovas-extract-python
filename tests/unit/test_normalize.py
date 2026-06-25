@@ -3,6 +3,7 @@
 These are the cross-language equality rules; bugs here would silently break
 every golden test. Worth deep coverage.
 """
+
 from __future__ import annotations
 
 import pytest

@@ -3,6 +3,7 @@
 Handles `text/plain`. Detects encoding via chardet (BOM stripping handled
 implicitly by the codec). Returns text canonicalized by `normalize`.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -24,9 +25,9 @@ def _decode(data: bytes) -> tuple[str, str | None]:
     """
     # Try UTF-8/16 BOMs first — cheap and unambiguous.
     bom_cases: list[tuple[bytes, str, int]] = [
-        (b"\xef\xbb\xbf", "utf-8",    3),
-        (b"\xff\xfe",     "utf-16-le", 2),
-        (b"\xfe\xff",     "utf-16-be", 2),
+        (b"\xef\xbb\xbf", "utf-8", 3),
+        (b"\xff\xfe", "utf-16-le", 2),
+        (b"\xfe\xff", "utf-16-be", 2),
     ]
     for prefix, enc, strip in bom_cases:
         if data.startswith(prefix):
@@ -75,9 +76,7 @@ class TxtExtractor(IExtractor):
     ) -> ExtractionResult:
         limits = limits or Limits()
         if len(data) > limits.max_text_bytes:
-            raise ResourceExhaustedError(
-                "text size", limits.max_text_bytes, observed=len(data)
-            )
+            raise ResourceExhaustedError("text size", limits.max_text_bytes, observed=len(data))
 
         raw_text, charset = _decode(data)
         text = canonicalize_text(raw_text)

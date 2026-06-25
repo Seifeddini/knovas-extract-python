@@ -1,4 +1,5 @@
 """Unit tests for the ExtractionResult dataclass — round-trip via JSON Schema."""
+
 from __future__ import annotations
 
 import pytest
@@ -24,7 +25,9 @@ def sample_result() -> ExtractionResult:
             size_bytes=42,
             filename="x.txt",
         ),
-        metadata=Metadata(title="t", author="a", word_count=7, extra={"txt:charset_detected": "utf-8"}),
+        metadata=Metadata(
+            title="t", author="a", word_count=7, extra={"txt:charset_detected": "utf-8"}
+        ),
         content=Content(
             text="hello world\n\nsecond paragraph",
             pages=[Page(index=0, text="hello world")],

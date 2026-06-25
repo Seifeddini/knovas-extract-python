@@ -8,6 +8,7 @@ of the KnowledgeBase monorepo (pinned by sha in tests/spec/).
 extractors honor it; keeping the public types co-located makes the import surface
 single-file: `from knovas_extract import ExtractionResult, Limits`.
 """
+
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
@@ -23,11 +24,11 @@ class Limits:
     See docs/sandboxing.md.
     """
 
-    max_input_bytes: int = 100 * 1024 * 1024          # 100 MiB
+    max_input_bytes: int = 100 * 1024 * 1024  # 100 MiB
     max_pages: int = 10_000
-    max_decompression_ratio: int = 100                # ZIP-bomb guard
-    max_text_bytes: int = 50 * 1024 * 1024            # 50 MiB extracted text
-    max_recursion_depth: int = 256                    # RTF / nested-XML guard
+    max_decompression_ratio: int = 100  # ZIP-bomb guard
+    max_text_bytes: int = 50 * 1024 * 1024  # 50 MiB extracted text
+    max_recursion_depth: int = 256  # RTF / nested-XML guard
 
 
 @dataclass(slots=True)
@@ -107,8 +108,12 @@ class ExtractionResult:
             metadata=Metadata(**data["metadata"]),
             content=Content(
                 text=data["content"]["text"],
-                pages=[Page(**p) for p in data["content"]["pages"]] if data["content"].get("pages") else None,
-                sections=[Section(**s) for s in data["content"]["sections"]] if data["content"].get("sections") else None,
+                pages=[Page(**p) for p in data["content"]["pages"]]
+                if data["content"].get("pages")
+                else None,
+                sections=[Section(**s) for s in data["content"]["sections"]]
+                if data["content"].get("sections")
+                else None,
             ),
             warnings=list(data.get("warnings") or []),
             extractor=Extractor(**data["extractor"]),

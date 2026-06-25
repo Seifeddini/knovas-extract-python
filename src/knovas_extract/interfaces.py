@@ -7,6 +7,7 @@ exactly one class implementing this protocol. The class is registered with
 The single-method protocol mirrors the IDocumentChunker style established in
 the Semantix backend (`knovas-software/app/src/interfaces/IDocumentChunker.py`).
 """
+
 from __future__ import annotations
 
 from typing import ClassVar, Protocol, runtime_checkable

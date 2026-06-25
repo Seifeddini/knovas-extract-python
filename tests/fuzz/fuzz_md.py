@@ -5,6 +5,7 @@ Run locally:
 
 See fuzz_txt.py for usage notes.
 """
+
 from __future__ import annotations
 
 import sys

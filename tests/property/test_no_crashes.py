@@ -8,6 +8,7 @@ Invariants:
 
 We feed random bytes / mutated valid inputs and assert these invariants hold.
 """
+
 from __future__ import annotations
 
 import pytest
@@ -25,12 +26,14 @@ pytestmark = pytest.mark.property
 SMALL_LIMITS = Limits(max_input_bytes=1 << 20, max_text_bytes=1 << 20)
 
 # Reasonable MIMEs we know about — pulled from the LAZY_LOADERS keys.
-KNOWN_MIMES = st.sampled_from([
-    "text/plain",
-    "text/markdown",
-    "application/pdf",
-    "text/html",
-])
+KNOWN_MIMES = st.sampled_from(
+    [
+        "text/plain",
+        "text/markdown",
+        "application/pdf",
+        "text/html",
+    ]
+)
 
 
 @given(data=st.binary(max_size=1 << 16))

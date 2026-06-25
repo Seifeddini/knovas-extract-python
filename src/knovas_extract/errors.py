@@ -4,6 +4,7 @@ Every public entry point in this package either returns a valid ExtractionResult
 or raises a subclass of ExtractError. The hierarchy is closed — adding a new
 error class is a minor version bump and must update the schema docs.
 """
+
 from __future__ import annotations
 
 
@@ -38,7 +39,9 @@ class ResourceExhaustedError(ExtractError):
     pathological recursion depth.
     """
 
-    def __init__(self, what: str, limit: int | float, *, observed: int | float | None = None) -> None:
+    def __init__(
+        self, what: str, limit: int | float, *, observed: int | float | None = None
+    ) -> None:
         self.what = what
         self.limit = limit
         self.observed = observed

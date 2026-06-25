@@ -23,6 +23,7 @@ Promises (asserted by CI; see SECURITY.md):
 
 Spec conformance: this implementation pins clients/extraction/spec @ <pinned-sha>.
 """
+
 from __future__ import annotations
 
 from knovas_extract._version import SPEC_VERSION, __version__

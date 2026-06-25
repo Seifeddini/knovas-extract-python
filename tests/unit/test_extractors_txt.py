@@ -1,4 +1,5 @@
 """Unit tests for the txt extractor."""
+
 from __future__ import annotations
 
 import pytest

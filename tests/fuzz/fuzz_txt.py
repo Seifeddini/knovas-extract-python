@@ -8,6 +8,7 @@ Run in CIFuzz: see .github/workflows/cifuzz.yml.
 Expected behavior: the only exceptions that escape are subclasses of ExtractError.
 Anything else is a crash.
 """
+
 from __future__ import annotations
 
 import sys

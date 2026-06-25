@@ -12,6 +12,7 @@ We deliberately do NOT trust file extensions when content is available. Polyglot
 files (a valid PDF that is also a valid ZIP) are real; they're handled by
 header-first detection.
 """
+
 from __future__ import annotations
 
 import contextlib
@@ -46,26 +47,25 @@ MIME_REGISTRY: dict[str, IExtractor] = {}
 
 # Filename-extension fallback (used only when content sniffing fails).
 EXT_REGISTRY: dict[str, str] = {
-    ".txt":  "text/plain",
-    ".md":   "text/markdown",
+    ".txt": "text/plain",
+    ".md": "text/markdown",
     ".markdown": "text/markdown",
-    ".pdf":  "application/pdf",
+    ".pdf": "application/pdf",
     ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     ".html": "text/html",
-    ".htm":  "text/html",
-    ".rtf":  "application/rtf",
-    ".eml":  "message/rfc822",
-    ".msg":  "application/vnd.ms-outlook",
+    ".htm": "text/html",
+    ".rtf": "application/rtf",
+    ".eml": "message/rfc822",
+    ".msg": "application/vnd.ms-outlook",
 }
 
 _LAZY_LOADERS: dict[str, str] = {
     # MIME → module to import. The module's import side-effect registers it.
-    "text/plain":    "knovas_extract.extractors.txt",
+    "text/plain": "knovas_extract.extractors.txt",
     "text/markdown": "knovas_extract.extractors.md",
-    "application/pdf":  "knovas_extract.extractors.pdf",
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
-        "knovas_extract.extractors.docx",
-    "text/html":     "knovas_extract.extractors.html",
+    "application/pdf": "knovas_extract.extractors.pdf",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "knovas_extract.extractors.docx",
+    "text/html": "knovas_extract.extractors.html",
     "application/rtf": "knovas_extract.extractors.rtf",
     "message/rfc822": "knovas_extract.extractors.eml",
     "application/vnd.ms-outlook": "knovas_extract.extractors.msg",
@@ -84,17 +84,13 @@ def _read_input(input: InputT, limits: Limits) -> tuple[bytes, str | None]:
         path = Path(os.fspath(input))
         size = path.stat().st_size
         if size > limits.max_input_bytes:
-            raise ResourceExhaustedError(
-                "input size", limits.max_input_bytes, observed=size
-            )
+            raise ResourceExhaustedError("input size", limits.max_input_bytes, observed=size)
         with path.open("rb") as f:
             data = f.read()
         filename = path.name
 
     if len(data) > limits.max_input_bytes:
-        raise ResourceExhaustedError(
-            "input size", limits.max_input_bytes, observed=len(data)
-        )
+        raise ResourceExhaustedError("input size", limits.max_input_bytes, observed=len(data))
     return data, filename
 
 
@@ -206,17 +202,25 @@ def extract(
     # Defense-in-depth: enforce the source block matches what dispatch actually saw.
     # An extractor that overrides source.sha256/size_bytes/mime_type is buggy;
     # we patch it here rather than trust per-extractor implementations.
-    object.__setattr__(result, "source", Source(
-        mime_type=detected_mime,
-        sha256=hashlib.sha256(data).hexdigest(),
-        size_bytes=len(data),
-        filename=filename,
-    ))
+    object.__setattr__(
+        result,
+        "source",
+        Source(
+            mime_type=detected_mime,
+            sha256=hashlib.sha256(data).hexdigest(),
+            size_bytes=len(data),
+            filename=filename,
+        ),
+    )
     object.__setattr__(result, "spec_version", _SPEC_VERSION)
-    object.__setattr__(result, "extractor", Extractor(
-        name="knovas-extract-python",
-        version=_PACKAGE_VERSION,
-    ))
+    object.__setattr__(
+        result,
+        "extractor",
+        Extractor(
+            name="knovas-extract-python",
+            version=_PACKAGE_VERSION,
+        ),
+    )
     return result
 
 

@@ -8,6 +8,7 @@ regression OR a deliberate spec change (which requires a separate spec PR).
 This file is parametrized at collection time from the spec corpus, so adding
 fixtures to the spec automatically extends the test matrix without code change.
 """
+
 from __future__ import annotations
 
 import json
@@ -73,7 +74,9 @@ def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
     if os.environ.get("KNOVAS_EXTRACT_SPEC_DIR"):
         candidates.append(Path(os.environ["KNOVAS_EXTRACT_SPEC_DIR"]))
     here = Path(__file__).resolve().parent
-    candidates.append(here.parent.parent.parent / "KnowledgeBase" / "clients" / "extraction" / "spec")
+    candidates.append(
+        here.parent.parent.parent / "KnowledgeBase" / "clients" / "extraction" / "spec"
+    )
     candidates.append(here.parent / "spec")
 
     spec_dir = next((c for c in candidates if c.is_dir() and (c / "schema.json").is_file()), None)
@@ -99,9 +102,9 @@ def test_fixture(fixture_pair: tuple[Path, Path]) -> None:
 
     # Source: hash / size / mime exact match.
     for k in ("mime_type", "sha256", "size_bytes"):
-        assert actual["source"][k] == expected["source"][k], (
-            f"source.{k}: actual={actual['source'][k]!r} expected={expected['source'][k]!r}"
-        )
+        assert (
+            actual["source"][k] == expected["source"][k]
+        ), f"source.{k}: actual={actual['source'][k]!r} expected={expected['source'][k]!r}"
 
     # Text within tolerance (0.5% Levenshtein by default).
     a = _canon(actual["content"]["text"])

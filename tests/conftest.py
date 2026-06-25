@@ -4,6 +4,7 @@ Key invariant: no test may make a network call. Enforced via pytest-socket; the
 addopts in pyproject.toml run `--disable-socket --allow-unix-socket` by default.
 If you genuinely need a socket (you don't), mark with `@pytest.mark.allow_hosts`.
 """
+
 from __future__ import annotations
 
 from pathlib import Path

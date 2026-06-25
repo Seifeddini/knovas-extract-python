@@ -1,4 +1,5 @@
 """Unit tests for dispatch — MIME detection + extractor routing."""
+
 from __future__ import annotations
 
 import pytest

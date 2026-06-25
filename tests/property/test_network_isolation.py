@@ -6,6 +6,7 @@ extraction path doesn't try to phone home.
 
 If you ever see a `SocketBlockedError` here, that's the point — fix the extractor.
 """
+
 from __future__ import annotations
 
 import pytest

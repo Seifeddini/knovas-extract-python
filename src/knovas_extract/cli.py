@@ -3,6 +3,7 @@
 Intentionally tiny; richer subcommands (sandbox, validate, dump-schema) land
 in 0.2.0+.
 """
+
 from __future__ import annotations
 
 import argparse

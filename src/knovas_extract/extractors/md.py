@@ -4,6 +4,7 @@ Handles `text/markdown`. Lifts YAML frontmatter into Metadata when present.
 Derives `Section[]` from ATX headings (`#`, `##`, …). Does NOT render Markdown
 to HTML — we want the raw source preserved (it's what humans read).
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -99,9 +100,7 @@ class MdExtractor(IExtractor):
     ) -> ExtractionResult:
         limits = limits or Limits()
         if len(data) > limits.max_text_bytes:
-            raise ResourceExhaustedError(
-                "text size", limits.max_text_bytes, observed=len(data)
-            )
+            raise ResourceExhaustedError("text size", limits.max_text_bytes, observed=len(data))
 
         raw_text, charset = _decode(data)
         meta_raw, body = _split_frontmatter(raw_text)

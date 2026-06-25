@@ -5,6 +5,7 @@ reason cross-language golden tests can compare text at all. See
 clients/extraction/spec/docs/tolerances.md::Text equality for the canonical
 specification.
 """
+
 from __future__ import annotations
 
 import re

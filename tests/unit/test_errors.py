@@ -3,6 +3,7 @@
 Asserts the contract callers depend on: every public error is a subclass of
 ExtractError; constructors set the documented attributes.
 """
+
 from __future__ import annotations
 
 import pytest
