@@ -122,11 +122,11 @@ jobs:
           cache: 'pip'
       - run: pip install hatch
       - name: Bandit
-        run: hatch -e sec run bandit
+        run: hatch -e sec run run-bandit
       - name: Semgrep
-        run: hatch -e sec run semgrep
+        run: hatch -e sec run run-semgrep
       - name: pip-audit
-        run: hatch -e sec run pip-audit
+        run: hatch -e sec run run-pip-audit
       - name: OSV Scanner
         uses: google/osv-scanner-action/osv-scanner-action@v1.9.0
         with:

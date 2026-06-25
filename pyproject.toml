@@ -128,13 +128,15 @@ dependencies = [
   "semgrep == 1.95.0 ; sys_platform != 'win32'",
   "pip-audit == 2.7.3",
 ]
+# Script aliases must NOT share a name with the underlying binary — hatch
+# detects 'bandit -> bandit' as circular expansion and refuses to run.
 [tool.hatch.envs.sec.scripts]
-bandit    = "bandit -r src -c pyproject.toml"
-semgrep   = "semgrep --config p/security-audit --config p/owasp-top-ten --error src"
-pip-audit = "pip-audit --strict --desc on"
+run-bandit    = "bandit -r src -c pyproject.toml"
+run-semgrep   = "semgrep --config p/security-audit --config p/owasp-top-ten --error src"
+run-pip-audit = "pip-audit --strict --desc on"
 # osv-scanner is a Go binary; install separately or run via the Action.
 # sigstore + slsa-verifier likewise live in release.yml.
-all = ["bandit", "pip-audit"]
+all = ["run-bandit", "run-pip-audit"]
 
 # Golden corpus tests — pull the pinned spec, run the corpus.
 [tool.hatch.envs.golden]
