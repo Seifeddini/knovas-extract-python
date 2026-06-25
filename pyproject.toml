@@ -142,7 +142,10 @@ run-pip-audit = "pip-audit --strict --desc on"
 all = ["run-bandit", "run-pip-audit"]
 
 # Golden corpus tests — pull the pinned spec, run the corpus.
+# Requires the format extras so dispatch can actually invoke each extractor;
+# otherwise tests fail with DependencyMissingError instead of validating output.
 [tool.hatch.envs.golden]
+features = ["pdf", "docx", "html", "rtf", "msg", "md"]
 dependencies = [
   "pytest >= 8.3",
   "pytest-socket >= 0.7.0",
