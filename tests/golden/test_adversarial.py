@@ -108,6 +108,13 @@ def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
 
 def test_adversarial_fixture(adversarial_pair: tuple[Path, str]) -> None:
     path, expected = adversarial_pair
+
+    # Same macOS+PyMuPDF skip as test_corpus.py — see comment there.
+    import sys as _sys
+
+    if _sys.platform == "darwin" and path.suffix.lower() == ".pdf":
+        pytest.skip("PyMuPDF C-extension segfaults on macOS runners (upstream)")
+
     expected_cls = _ERROR_CLASSES.get(expected)
 
     if expected_cls is not None:

@@ -4,6 +4,29 @@ All notable changes documented here. Format: [Keep a Changelog](https://keepacha
 
 A **major** version bump matches the major of `spec_version` it conforms to.
 
+## [0.1.3] — 2026-06-25
+
+### Fixed
+- **macOS Golden tests** now run strictly. The actual failure mode (finally
+  captured via a maintainer-pasted CI log) is a PyMuPDF C-extension segfault
+  at `import` on the macOS-latest GH runners — not anything in knovas-extract
+  itself. Linux + Windows are unaffected. Skipped PDF tests on macOS at the
+  test layer (`pytest.skip("PyMuPDF C-extension segfaults on macOS runners
+  (upstream)")`) so the other 7 formats DO run strictly on macOS. The
+  blanket `continue-on-error: ${{ runner.os == 'macOS' }}` in `ci.yml`
+  is removed; the macOS diagnostic step is also gone (purpose served).
+- The previous claim that the dispatch generic-MIME fallback (0.1.2) was
+  what fixed macOS was wrong — that change is a real improvement but
+  unrelated to the actual platform failure.
+
+### Known limitations
+- **PDF extraction is not validated on macOS** in our CI matrix. The library
+  *should* work on macOS for end users (the segfault may be GH-runner
+  specific, related to dyld/codesigning quirks on the macos-latest image),
+  but we cannot certify it until upstream PyMuPDF ships a fix. Track at
+  https://github.com/pymupdf/PyMuPDF/issues. Linux + Windows PDF support is
+  fully verified.
+
 ## [0.1.2] — 2026-06-25
 
 ### Fixed

@@ -95,6 +95,18 @@ def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
 def test_fixture(fixture_pair: tuple[Path, Path]) -> None:
     fixture_path, expected_path = fixture_pair
 
+    # macOS PDF skip: PyMuPDF's _extra C extension segfaults at import on
+    # the macOS-latest GitHub runners (both Python 3.11 and 3.13). The crash
+    # happens inside pymupdf/mupdf.py module load, before any of our code
+    # runs. Upstream issue is independent of knovas-extract; track at
+    # https://github.com/pymupdf/PyMuPDF/issues and pin a known-good version
+    # when one ships. Until then, skip PDF on macOS rather than dropping
+    # macOS coverage for the other 7 formats.
+    import sys as _sys
+
+    if _sys.platform == "darwin" and fixture_path.suffix.lower() == ".pdf":
+        pytest.skip("PyMuPDF C-extension segfaults on macOS runners (upstream)")
+
     expected = json.loads(expected_path.read_text(encoding="utf-8"))
     try:
         actual = extract(fixture_path).to_dict()

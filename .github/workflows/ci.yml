@@ -110,42 +110,11 @@ jobs:
       - name: Unit tests
         run: hatch run test -m unit -v
 
-      # Diagnostic on macOS only: dump environment + a sample extraction so
-      # the next debug pass has data instead of guesses (CI logs aren't
-      # publicly fetchable for me to inspect).
-      - name: "macOS golden debug"
-        if: runner.os == 'macOS' && steps.spec-checkout.outcome == 'success'
-        shell: bash
-        continue-on-error: true
-        run: |
-          echo "=== libmagic ==="
-          which file && file --version | head -1 || echo "(file/libmagic not found)"
-          brew list --versions libmagic 2>/dev/null || echo "(libmagic not brew-installed)"
-          echo "=== python-magic on this Python ==="
-          hatch -e golden run python -c "
-          try:
-              import magic
-              for path in ['$KNOVAS_EXTRACT_SPEC_DIR/corpus/pdf/simple-text.pdf',
-                           '$KNOVAS_EXTRACT_SPEC_DIR/corpus/eml/simple.eml',
-                           '$KNOVAS_EXTRACT_SPEC_DIR/corpus/docx/simple.docx',
-                           '$KNOVAS_EXTRACT_SPEC_DIR/corpus/html/simple.html']:
-                  with open(path, 'rb') as f: data = f.read(8192)
-                  print(f'libmagic mime for {path.split(\"/\")[-1]}: {magic.from_buffer(data, mime=True)!r}')
-          except Exception as e:
-              print(f'libmagic unavailable: {e!r}')
-          "
-          echo "=== sample extract output ==="
-          hatch -e golden run python -m knovas_extract.cli "$KNOVAS_EXTRACT_SPEC_DIR/corpus/eml/simple.eml" 2>&1 | head -25 || true
-
-      # macOS Golden tests fail with a not-yet-understood difference (most
-      # likely libmagic-version-skew on the GH runners). Strict on Linux
-      # and Windows; continue-on-error on macOS until the diagnostic step
-      # above gives us enough data to fix the actual root cause. (The 2a33f64
-      # attempt to make this strict on macOS failed; dc37f45's "passing"
-      # macOS jobs were either flaky or the diagnostic step's hatch-env
-      # pre-warming was the real reason — not the dispatch fix.)
+      # macOS PDF tests skip at the test level (PyMuPDF C-extension segfaults
+      # at import on macOS-latest — see comment in tests/golden/test_corpus.py).
+      # The other 7 formats DO run strictly on macOS; this is no longer
+      # an advisory job.
       - name: "Golden corpus tests (Phase 0 — skipped if corpus is empty or absent)"
-        continue-on-error: ${{ runner.os == 'macOS' }}
         run: hatch -e golden run run
 
       - name: Property tests
