@@ -104,21 +104,36 @@ def _detect_mime(data: bytes, filename: str | None) -> str:
     # (libmagic system library missing on minimal containers, non-str under
     # unusual encoding conditions, etc.). All are non-fatal — we fall through
     # to the built-in header sniff in step 2.
+    libmagic_mime: str | None = None
     with contextlib.suppress(Exception):
         import magic
 
         # mime=True forces RFC-style MIME string output.
-        mime: str = magic.from_buffer(data[: 1 << 13], mime=True)
-        if mime and mime != "application/octet-stream":
-            return mime
+        m = magic.from_buffer(data[: 1 << 13], mime=True)
+        if m and m != "application/octet-stream":
+            libmagic_mime = m
+
+    # Office Open XML (DOCX/XLSX/PPTX) is structurally a ZIP. libmagic
+    # reports 'application/zip' for *every* DOCX unless the system has the
+    # office-specific magic patterns installed. If the filename gives us a
+    # more specific subtype, prefer it. (We never trust the filename when
+    # libmagic returned a NON-zip answer.)
+    if libmagic_mime == "application/zip" and filename:
+        ext = Path(filename).suffix.lower()
+        if ext in EXT_REGISTRY:
+            return EXT_REGISTRY[ext]
+    if libmagic_mime is not None:
+        return libmagic_mime
 
     # 2. Tiny built-in header sniff for common formats (covers test paths
     # where python-magic isn't installed).
     if data.startswith(b"%PDF-"):
         return "application/pdf"
-    if data.startswith(b"PK\x03\x04"):
-        # ZIP — could be DOCX, XLSX, ePub, ...; defer to extension below.
-        pass
+    if data.startswith(b"PK\x03\x04") and filename:
+        # ZIP — could be DOCX, XLSX, ePub, ...; use the extension to pick.
+        ext = Path(filename).suffix.lower()
+        if ext in EXT_REGISTRY:
+            return EXT_REGISTRY[ext]
     if data.startswith(b"{\\rtf"):
         return "application/rtf"
     if data.startswith((b"<!DOCTYPE html", b"<html", b"<HTML")):

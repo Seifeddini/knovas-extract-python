@@ -109,8 +109,11 @@ dependencies = [
 test = "pytest {args:tests}"
 
 # Lint + static type checking.
+# NOT detached: installs the project + format extras so mypy/pyright can
+# introspect real types from the optional deps (python-docx, mammoth, fitz...).
+# Without this they fall back to advisory missing-import warnings only.
 [tool.hatch.envs.lint]
-detached = true
+features = ["pdf", "docx", "html", "rtf", "msg", "md"]
 dependencies = [
   "ruff == 0.7.4",
   "mypy == 1.13.0",
@@ -228,11 +231,14 @@ module = [
   "magic", "magic.*",
   "selectolax.*",
   "striprtf.*",
-  "fitz.*",
+  "fitz", "fitz.*",
   "extract_msg.*",
   "chardet", "chardet.*",
   "frontmatter", "frontmatter.*",
   "rapidfuzz.*",
+  "docx", "docx.*",
+  "mammoth", "mammoth.*",
+  "defusedxml", "defusedxml.*",
 ]
 ignore_missing_imports = true
 
