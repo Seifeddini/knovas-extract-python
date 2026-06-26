@@ -96,11 +96,30 @@ def _read_input(input: InputT, limits: Limits) -> tuple[bytes, str | None]:
     return data, filename
 
 
+# MIME canonicalization map — libmagic versions across Linux/macOS/Windows
+# return DIFFERENT but equally-valid MIMEs for the same format. We always emit
+# the canonical form (IANA-registered or de facto) so source.mime_type is
+# byte-deterministic across platforms — otherwise the golden corpus would
+# need per-platform expected.json files.
+_MIME_CANONICAL = {
+    # RTF: IANA-registered as application/rtf since 1998; older libmagic
+    # (Windows bundled) still says text/rtf.
+    "text/rtf": "application/rtf",
+}
+
+
+def _canonicalize_mime(mime: str) -> str:
+    return _MIME_CANONICAL.get(mime, mime)
+
+
 def _detect_mime(data: bytes, filename: str | None) -> str:
     """Header-first MIME detection with extension fallback.
 
     libmagic is optional — if it's unavailable, fall back to a small
     header-byte sniff and the extension table.
+
+    Output is canonicalized via `_MIME_CANONICAL` so platform-version-
+    skew across libmagic builds doesn't leak into `source.mime_type`.
     """
     # 1. libmagic (preferred). Catches both import errors and runtime errors
     # (libmagic system library missing on minimal containers, non-str under
@@ -137,9 +156,9 @@ def _detect_mime(data: bytes, filename: str | None) -> str:
         ext = Path(filename).suffix.lower()
         ext_mime = EXT_REGISTRY.get(ext)
         if ext_mime and (libmagic_mime in _GENERIC_MIMES or libmagic_mime is None):
-            return ext_mime
+            return _canonicalize_mime(ext_mime)
     if libmagic_mime is not None:
-        return libmagic_mime
+        return _canonicalize_mime(libmagic_mime)
 
     # 2. Tiny built-in header sniff for common formats (covers test paths
     # where python-magic isn't installed).
@@ -149,7 +168,7 @@ def _detect_mime(data: bytes, filename: str | None) -> str:
         # ZIP — could be DOCX, XLSX, ePub, ...; use the extension to pick.
         ext = Path(filename).suffix.lower()
         if ext in EXT_REGISTRY:
-            return EXT_REGISTRY[ext]
+            return _canonicalize_mime(EXT_REGISTRY[ext])
     if data.startswith(b"{\\rtf"):
         return "application/rtf"
     if data.startswith((b"<!DOCTYPE html", b"<html", b"<HTML")):
