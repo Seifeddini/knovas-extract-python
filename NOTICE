@@ -15,6 +15,24 @@ Third-party components used at runtime:
   apply. Use `pip install knovas-extract[minimal]` to install without PyMuPDF
   (PDF extraction will raise DependencyMissingError until you opt in).
 
+* pymupdf4llm (https://github.com/pymupdf/RAG)
+  License: Artistic-2.0 (inherits PyMuPDF's AGPL-3.0 transitively)
+  Used by: src/knovas_extract/extractors/pdf.py (emit_markdown path)
+  NOTE: License posture identical to PyMuPDF (already an AGPL-3.0 obligation
+  for anyone using the [pdf] extra); adding pymupdf4llm does not widen it.
+
+* markdownify (https://github.com/matthewwithanm/python-markdownify)
+  License: MIT
+  Used by: src/knovas_extract/_markdown.py (HTML→Markdown conversion after
+  sanitization). Only reached via the [markdown] extra when a caller passes
+  emit_markdown=True.
+
+* pysbd (https://github.com/nipunsadvilkar/pySBD)
+  License: MIT
+  Used by: src/knovas_extract/_sentences.py (deterministic sentence
+  tokenization). Only reached via the [sentences] extra when a caller passes
+  emit_sentences=True. Pure-Python, no network, no model download.
+
 * python-docx (https://github.com/python-openxml/python-docx)
   License: MIT
   Used by: src/knovas_extract/extractors/docx.py
@@ -51,4 +69,4 @@ Third-party components used at runtime:
   License: LGPL-2.1
   Used by: src/knovas_extract/extractors/txt.py (encoding detection)
 
-This NOTICE is regenerated from the SBOM on every release. Last manual update: 2026-06-25.
+This NOTICE is regenerated from the SBOM on every release. Last manual update: 2026-07-02.

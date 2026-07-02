@@ -47,6 +47,8 @@ class RtfExtractor(IExtractor):
         *,
         filename: str | None = None,
         limits: Limits | None = None,
+        emit_markdown: bool = False,
+        emit_sentences: bool = False,
     ) -> ExtractionResult:
         limits = limits or Limits()
         if len(data) > limits.max_input_bytes:
@@ -74,6 +76,22 @@ class RtfExtractor(IExtractor):
                 "(never executed, never fetched — see SECURITY.md CVE-2017-0199 mitigation)"
             )
 
+        # striprtf preserves no structure — no headings, no lists, no
+        # emphasis — so we cannot honestly emit markdown here. Leave the
+        # field null and warn so consumers can distinguish "no structure
+        # available" from "this producer doesn't support markdown yet".
+        if emit_markdown:
+            warnings.append(
+                "rtf: markdown requested but striprtf preserves no structure; "
+                "content.markdown left null"
+            )
+
+        sentences = None
+        if emit_sentences:
+            from knovas_extract._sentences import split_sentences
+
+            sentences = split_sentences(text, limits, warnings=warnings)
+
         return make_result(
             text=text,
             mime="application/rtf",
@@ -82,6 +100,7 @@ class RtfExtractor(IExtractor):
             filename=filename,
             metadata=Metadata(word_count=word_count(text)),
             warnings=warnings,
+            sentences=sentences,
         )
 
 

@@ -48,16 +48,26 @@ dependencies = [
 minimal = []
 
 # Format extras — opt-in per format.
-pdf  = ["pymupdf >= 1.24.0"]              # AGPL
+pdf  = ["pymupdf >= 1.24.0", "pymupdf4llm >= 0.0.17,<0.0.20"]  # AGPL (via pymupdf)
 docx = ["python-docx >= 1.1.2", "mammoth >= 1.8.0"]
 msg  = ["extract-msg >= 0.48.0"]          # GPL
 html = ["selectolax >= 0.3.21"]
 rtf  = ["striprtf >= 0.0.27"]
 md   = ["python-frontmatter >= 1.1.0"]
 
+# Markdown emission (opt-in `extract(..., emit_markdown=True)`). Enables
+# sanitized HTML→Markdown conversion in the html/docx/eml/msg paths.
+# See SECURITY.md → "Markdown emission" for the sanitizer contract.
+markdown = ["markdownify >= 0.13.1,<1.0"]
+
+# Sentence tokenization (opt-in `extract(..., emit_sentences=True)`). pysbd
+# is pure-Python (MIT), 22 languages, no model download. See
+# docs/citations.md for the sentence↔page↔line coordinate contract.
+sentences = ["pysbd >= 0.3.4,<0.4"]
+
 # Convenience: everything (note licensing implications).
 all = [
-  "knovas-extract[pdf,docx,msg,html,rtf,md]",
+  "knovas-extract[pdf,docx,msg,html,rtf,md,markdown,sentences]",
 ]
 
 [project.urls]
@@ -113,7 +123,7 @@ test = "pytest {args:tests}"
 # introspect real types from the optional deps (python-docx, mammoth, fitz...).
 # Without this they fall back to advisory missing-import warnings only.
 [tool.hatch.envs.lint]
-features = ["pdf", "docx", "html", "rtf", "msg", "md"]
+features = ["pdf", "docx", "html", "rtf", "msg", "md", "markdown", "sentences"]
 dependencies = [
   "ruff == 0.7.4",
   "mypy == 1.13.0",
@@ -145,7 +155,7 @@ all = ["run-bandit", "run-pip-audit"]
 # Requires the format extras so dispatch can actually invoke each extractor;
 # otherwise tests fail with DependencyMissingError instead of validating output.
 [tool.hatch.envs.golden]
-features = ["pdf", "docx", "html", "rtf", "msg", "md"]
+features = ["pdf", "docx", "html", "rtf", "msg", "md", "markdown", "sentences"]
 dependencies = [
   "pytest >= 8.3",
   "pytest-socket >= 0.7.0",
@@ -158,7 +168,7 @@ run = "pytest tests/golden {args:-v}"
 
 # Property tests — hypothesis-driven robustness + leak detection.
 [tool.hatch.envs.property]
-features = ["pdf", "docx", "html", "rtf", "msg", "md"]
+features = ["pdf", "docx", "html", "rtf", "msg", "md", "markdown", "sentences"]
 dependencies = [
   "pytest >= 8.3",
   "pytest-socket >= 0.7.0",
@@ -179,12 +189,17 @@ run = "pytest bench --benchmark-only --benchmark-json=.benchmarks/result.json {a
 
 # Fuzzing (atheris, Linux/macOS only).
 [tool.hatch.envs.fuzz]
+features = ["pdf", "docx", "html", "rtf", "msg", "md", "markdown", "sentences"]
 dependencies = [
   "atheris >= 2.3.0 ; sys_platform != 'win32'",
 ]
 [tool.hatch.envs.fuzz.scripts]
-txt = "python tests/fuzz/fuzz_txt.py -atheris_runs=10000 {args}"
-md  = "python tests/fuzz/fuzz_md.py  -atheris_runs=10000 {args}"
+txt       = "python tests/fuzz/fuzz_txt.py       -atheris_runs=10000 {args}"
+md        = "python tests/fuzz/fuzz_md.py        -atheris_runs=10000 {args}"
+markdown  = "python tests/fuzz/fuzz_markdown.py  -atheris_runs=10000 {args}"
+sentences = "python tests/fuzz/fuzz_sentences.py -atheris_runs=10000 {args}"
+metadata  = "python tests/fuzz/fuzz_metadata.py  -atheris_runs=10000 {args}"
+paths     = "python tests/fuzz/fuzz_paths.py     -atheris_runs=10000 {args}"
 
 # CI matrix.
 [[tool.hatch.envs.test.matrix]]
@@ -245,6 +260,7 @@ module = [
   "docx", "docx.*",
   "mammoth", "mammoth.*",
   "defusedxml", "defusedxml.*",
+  "pysbd", "pysbd.*",
 ]
 ignore_missing_imports = true
 

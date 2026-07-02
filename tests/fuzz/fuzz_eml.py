@@ -23,6 +23,8 @@ def main() -> None:
     def TestOneInput(data: bytes) -> None:
         with contextlib.suppress(ExtractError):
             extract(data, mime="message/rfc822", limits=LIMITS)
+        with contextlib.suppress(ExtractError):
+            extract(data, mime="message/rfc822", limits=LIMITS, emit_markdown=True)
 
     atheris.Setup(sys.argv, TestOneInput)
     atheris.Fuzz()

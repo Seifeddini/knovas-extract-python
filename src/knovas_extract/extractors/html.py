@@ -34,18 +34,53 @@ from knovas_extract.result import ExtractionResult, Limits, Metadata, Section
 
 _SCRIPT_STYLE = re.compile(r"<(script|style)\b[^>]*>.*?</\1>", re.IGNORECASE | re.DOTALL)
 
+_URL_SCHEME_ALLOWLIST = frozenset({"http", "https", "mailto", "tel"})
+
+
+def _url_scheme_ok(url: str | None) -> bool:
+    """True iff the URL's scheme is in the allowlist. `None`/empty → False."""
+    if not url:
+        return False
+    s = url.strip()
+    # Protocol-relative (`//host/...`) has no explicit scheme → reject.
+    if s.startswith("//"):
+        return False
+    if ":" not in s:
+        # No scheme — treat as relative; safe.
+        return True
+    scheme = s.split(":", 1)[0].strip().lower()
+    return scheme in _URL_SCHEME_ALLOWLIST
+
 
 def _extract_html_metadata(tree: Any) -> dict[str, str | None]:
     # selectolax HTMLParser has no type stubs; `tree: Any` preserves the
     # css_first/css attribute access under mypy strict.
-    """Pull title + selected <meta> fields. Always returns a dict (possibly all None)."""
+    """Pull title + selected <meta> fields. Always returns a dict (possibly all None).
+
+    Includes the extended metadata surface: description, keywords, author,
+    canonical URL, robots, generator, article:*, OpenGraph og:* (property=),
+    Twitter Card twitter:* (name= or property=). URL-valued fields are
+    kept only when the URL scheme is in the allowlist; drops are counted
+    into the top-level `dropped_urls` sentinel key.
+    """
     meta: dict[str, str | None] = {
         "title": None,
         "description": None,
         "keywords": None,
+        "author": None,
         "language": None,
         "charset_declared": None,
+        "canonical": None,
+        "robots": None,
+        "generator": None,
+        "article_published_time": None,
+        "article_modified_time": None,
+        "article_author": None,
+        "article_section": None,
     }
+    og: dict[str, str] = {}
+    twitter: dict[str, str] = {}
+    dropped_urls = 0
 
     title_node = tree.css_first("title")
     if title_node and title_node.text():
@@ -58,29 +93,86 @@ def _extract_html_metadata(tree: Any) -> dict[str, str | None]:
         if lang:
             meta["language"] = lang.strip() or None
 
+    # <link rel="canonical" href=...>.
+    for link in tree.css("link"):
+        rel = (link.attributes.get("rel") or "").strip().lower()
+        if rel == "canonical":
+            href = link.attributes.get("href")
+            if href:
+                if _url_scheme_ok(href):
+                    meta["canonical"] = href.strip() or None
+                else:
+                    dropped_urls += 1
+            break
+
     for m in tree.css("meta"):
         name = (m.attributes.get("name") or "").strip().lower()
-        if name == "description":
-            content = m.attributes.get("content")
-            if content:
-                meta["description"] = content.strip() or None
-        elif name == "keywords":
-            content = m.attributes.get("content")
-            if content:
-                meta["keywords"] = content.strip() or None
+        prop = (m.attributes.get("property") or "").strip().lower()
+        content_attr = m.attributes.get("content")
+        content = content_attr.strip() if content_attr else None
+
+        # Basic name= tags.
+        if name == "description" and content:
+            meta["description"] = content
+        elif name == "keywords" and content:
+            meta["keywords"] = content
+        elif name == "author" and content:
+            meta["author"] = content
+        elif name == "robots" and content:
+            meta["robots"] = content
+        elif name == "generator" and content:
+            meta["generator"] = content
+
+        # Open Graph — spec-canonical namespace is `property=`.
+        if prop.startswith("og:") and content:
+            og_key = prop[3:]  # strip "og:"
+            # URL-valued OG fields must pass the scheme filter.
+            if og_key in ("url", "image") and not _url_scheme_ok(content):
+                dropped_urls += 1
+            else:
+                og[og_key] = content
+
+        # Twitter Cards — accept both name= and property=.
+        tw_key: str | None = None
+        if name.startswith("twitter:"):
+            tw_key = name[8:]
+        elif prop.startswith("twitter:"):
+            tw_key = prop[8:]
+        if tw_key and content:
+            if tw_key in ("image", "url") and not _url_scheme_ok(content):
+                dropped_urls += 1
+            else:
+                twitter[tw_key] = content
+
+        # Article schema — property=.
+        if prop == "article:published_time" and content:
+            meta["article_published_time"] = content
+        elif prop == "article:modified_time" and content:
+            meta["article_modified_time"] = content
+        elif prop == "article:author" and content:
+            meta["article_author"] = content
+        elif prop == "article:section" and content:
+            meta["article_section"] = content
+
         # <meta charset="..."> AND <meta http-equiv="Content-Type" content="...">.
         charset = m.attributes.get("charset")
         if charset:
             meta["charset_declared"] = charset.strip() or None
         elif (m.attributes.get("http-equiv") or "").lower() == "content-type":
-            content = (m.attributes.get("content") or "").lower()
-            if "charset=" in content:
-                meta["charset_declared"] = content.split("charset=", 1)[1].strip() or None
+            ct = (content or "").lower()
+            if "charset=" in ct:
+                meta["charset_declared"] = ct.split("charset=", 1)[1].strip() or None
 
+    for k, v in og.items():
+        meta[f"og_{k}"] = v
+    for k, v in twitter.items():
+        meta[f"twitter_{k}"] = v
+    if dropped_urls:
+        meta["_dropped_urls"] = str(dropped_urls)
     return meta
 
 
-def _extract_html_sections(html: str) -> list[Section]:
+def _extract_html_sections(html: str, canonical_text: str) -> list[Section]:
     """Flat list of sections derived from <h1>..<h6>, using text-level slicing.
 
     Walking selectolax's DOM sibling chain is fragile (node wrappers don't
@@ -88,6 +180,12 @@ def _extract_html_sections(html: str) -> list[Section]:
     times). Instead we slice the **rendered text** at heading boundaries — the
     same logic the markdown extractor uses. Simpler, deterministic, no DOM
     identity hazards.
+
+    Line coordinates are computed against ``canonical_text`` (== the
+    ``content.text`` we return) so the consumer-facing retrieval formula
+    resolves cleanly. Headings that don't appear in the canonical text
+    (edge cases where canonicalization reflows whitespace) get `None`
+    coords.
     """
     from selectolax.parser import HTMLParser
 
@@ -97,14 +195,12 @@ def _extract_html_sections(html: str) -> list[Section]:
     if not headings:
         return []
 
-    # Build a flat list of (heading_text, level) and use a regex on the rendered
-    # body text to locate each heading's position.
     body = tree.body
     if body is None:
         return []
     body_text = body.text(separator="\n")
 
-    found: list[tuple[str, int, int]] = []  # (heading, level, start_index)
+    found: list[tuple[str, int, int]] = []  # (heading, level, start_index in body_text)
     cursor = 0
     for h in headings:
         ht = h.text(strip=True) or ""
@@ -113,23 +209,48 @@ def _extract_html_sections(html: str) -> list[Section]:
         level = int(h.tag[1])
         idx = body_text.find(ht, cursor)
         if idx < 0:
-            # Heading text not found (rare — happens when text is split by
-            # nested inline tags). Skip; don't lie about the section.
             continue
         found.append((ht, level, idx))
         cursor = idx + len(ht)
 
     sections: list[Section] = []
+    canon_cursor = 0
     for i, (heading, level, start) in enumerate(found):
         text_start = start + len(heading)
-        # End at the next heading at equal-or-lower level.
         end = len(body_text)
         for j in range(i + 1, len(found)):
             if found[j][1] <= level:
                 end = found[j][2]
                 break
         section_text = canonicalize_text(body_text[text_start:end])
-        sections.append(Section(heading=heading, level=level, text=section_text))
+
+        # Line coords against canonical_text.
+        line_start: int | None = None
+        line_end: int | None = None
+        hstart = canonical_text.find(heading, canon_cursor)
+        if hstart >= 0:
+            line_start = 1 + canonical_text.count("\n", 0, hstart)
+            # End: next heading's position in canonical_text, or end-of-text.
+            next_pos = len(canonical_text)
+            for j in range(i + 1, len(found)):
+                if found[j][1] <= level:
+                    nh = found[j][0]
+                    n = canonical_text.find(nh, hstart + len(heading))
+                    if n >= 0:
+                        next_pos = n
+                    break
+            line_end = 1 + canonical_text.count("\n", 0, max(next_pos - 1, hstart))
+            canon_cursor = hstart + len(heading)
+
+        sections.append(
+            Section(
+                heading=heading,
+                level=level,
+                text=section_text,
+                line_start=line_start,
+                line_end=line_end,
+            )
+        )
     return sections
 
 
@@ -145,7 +266,13 @@ class HtmlExtractor(IExtractor):
         *,
         filename: str | None = None,
         limits: Limits | None = None,
+        emit_markdown: bool = False,
+        emit_sentences: bool = False,
     ) -> ExtractionResult:
+        from collections import Counter
+
+        from knovas_extract._metadata import finalize_warnings, sanitize_scalar
+
         limits = limits or Limits()
         if len(data) > limits.max_input_bytes:
             raise ResourceExhaustedError("input size", limits.max_input_bytes, observed=len(data))
@@ -172,25 +299,89 @@ class HtmlExtractor(IExtractor):
             raise ResourceExhaustedError("text size", limits.max_text_bytes, observed=len(text))
 
         meta_raw = _extract_html_metadata(tree)
-        sections = _extract_html_sections(cleaned)
+        sections = _extract_html_sections(cleaned, text)
+
+        warnings: list[str] = []
+        counts: Counter[str] = Counter()
 
         extra: dict[str, str | int | float | bool | None] = {}
-        if meta_raw.get("description"):
-            extra["html:description"] = meta_raw["description"]
-        if meta_raw.get("keywords"):
-            extra["html:keywords"] = meta_raw["keywords"]
-        if meta_raw.get("charset_declared"):
-            extra["html:charset_declared"] = meta_raw["charset_declared"]
+        # Map raw meta keys to `html:` extra keys — all values sanitized.
+        _mapping = {
+            "description": "html:description",
+            "keywords": "html:keywords",
+            "author": "html:author",
+            "canonical": "html:canonical",
+            "robots": "html:robots",
+            "generator": "html:generator",
+            "charset_declared": "html:charset_declared",
+            "article_published_time": "html:article_published_time",
+            "article_modified_time": "html:article_modified_time",
+            "article_author": "html:article_author",
+            "article_section": "html:article_section",
+        }
+        for src_key, dst_key in _mapping.items():
+            raw_value = meta_raw.get(src_key)
+            if raw_value is None:
+                continue
+            clean = sanitize_scalar(raw_value, limits=limits, counts=counts)
+            if clean is not None:
+                extra[dst_key] = clean
+        # OG + Twitter — anything starting with og_ / twitter_.
+        for k, v in meta_raw.items():
+            if v is None:
+                continue
+            if k.startswith("og_"):
+                clean = sanitize_scalar(v, limits=limits, counts=counts)
+                if clean is not None:
+                    extra[f"html:og:{k[3:]}"] = clean
+            elif k.startswith("twitter_"):
+                clean = sanitize_scalar(v, limits=limits, counts=counts)
+                if clean is not None:
+                    extra[f"html:twitter:{k[8:]}"] = clean
+
+        # URL-drop warning (aggregated from _extract_html_metadata).
+        dropped = meta_raw.get("_dropped_urls")
+        if dropped:
+            warnings.append(
+                f"html: dropped {dropped} URL(s) with disallowed scheme from meta / link"
+            )
+
         if charset:
             extra["html:charset_detected"] = charset
+        finalize_warnings(counts, warnings)
+
+        # Feed article:* into top-level Metadata.created / modified when the
+        # existing slots are empty (never overwrite).
+        created = extra.get("html:article_published_time")
+        modified = extra.get("html:article_modified_time")
 
         metadata = Metadata(
             title=meta_raw.get("title"),
-            author=None,
+            author=meta_raw.get("author"),
             language=meta_raw.get("language"),
+            created=str(created) if isinstance(created, str) else None,
+            modified=str(modified) if isinstance(modified, str) else None,
             word_count=word_count(text),
             extra=extra,
         )
+
+        # Markdown path: use the DOM-based sanitizer over the RAW input, not
+        # the `cleaned` (regex-stripped) input. The regex only removes
+        # <script>/<style>; the sanitizer also enforces the attr denylist,
+        # URL scheme allowlist, image alt-only policy, and structural DoS
+        # guards — all of which are required for hostile HTML.
+        markdown: str | None = None
+        if emit_markdown:
+            from knovas_extract._markdown import check_expansion, html_to_markdown
+
+            markdown = html_to_markdown(raw_text, limits, warnings=warnings)
+            check_expansion(markdown, len(text), limits)
+
+        sentences = None
+        if emit_sentences:
+            from knovas_extract._sentences import split_sentences
+
+            sentences = split_sentences(text, limits, warnings=warnings, language=metadata.language)
 
         return make_result(
             text=text,
@@ -200,6 +391,9 @@ class HtmlExtractor(IExtractor):
             filename=filename,
             metadata=metadata,
             sections=sections or None,
+            warnings=warnings or None,
+            markdown=markdown,
+            sentences=sentences,
         )
 
 

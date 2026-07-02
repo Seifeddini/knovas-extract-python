@@ -76,6 +76,27 @@ def _extract_body(msg: EmailMessage) -> tuple[str, str]:
     return str(payload), content_type
 
 
+def _extract_html_alternative(msg: EmailMessage) -> str | None:
+    """Return the raw HTML body if the message offers one, else None.
+
+    Used only on the `emit_markdown=True` path. `cid:` / `mid:` inline
+    references are refused by the shared sanitizer via the URL scheme
+    allowlist — no special handling required here.
+    """
+    if msg.is_multipart():
+        html = msg.get_body(preferencelist=("html",))
+        if html is not None:
+            return str(html.get_content())
+        return None
+    # Singlepart.
+    if msg.get_content_type() == "text/html":
+        payload = msg.get_content() if hasattr(msg, "get_content") else msg.get_payload(decode=True)
+        if isinstance(payload, bytes):
+            payload = payload.decode(msg.get_content_charset("utf-8"), errors="replace")
+        return str(payload)
+    return None
+
+
 def _collect_attachments(msg: EmailMessage) -> list[dict[str, str | int | None]]:
     out: list[dict[str, str | int | None]] = []
     if not msg.is_multipart():
@@ -106,6 +127,8 @@ class EmlExtractor(IExtractor):
         *,
         filename: str | None = None,
         limits: Limits | None = None,
+        emit_markdown: bool = False,
+        emit_sentences: bool = False,
     ) -> ExtractionResult:
         limits = limits or Limits()
         if len(data) > limits.max_input_bytes:
@@ -135,36 +158,60 @@ class EmlExtractor(IExtractor):
         if len(text.encode("utf-8")) > limits.max_text_bytes:
             raise ResourceExhaustedError("text size", limits.max_text_bytes, observed=len(text))
 
+        from collections import Counter
+
+        from knovas_extract._metadata import finalize_warnings, sanitize_scalar
+
         # Top-level metadata.
         subject = _safe_header(msg, "Subject")
         from_addr = _safe_header(msg, "From")
-        to_addr = _safe_header(msg, "To")
-        cc_addr = _safe_header(msg, "Cc")
-        msg_id = _safe_header(msg, "Message-ID")
         date_hdr = _safe_header(msg, "Date")
+
+        # Extended header surface — see plan / SECURITY.md. All values
+        # routed through sanitize_scalar; CRLF-poisoned values drop out.
+        _EXT_HEADERS = {
+            "Reply-To": "reply_to",
+            "Sender": "sender",
+            "In-Reply-To": "in_reply_to",
+            "References": "references",
+            "Delivered-To": "delivered_to",
+            "Return-Path": "return_path",
+            "List-Id": "list_id",
+            "List-Unsubscribe": "list_unsubscribe",
+            "X-Priority": "priority",
+            "Importance": "importance",
+            "Authentication-Results": "auth_results",
+            "Content-Language": "content_language",
+        }
 
         attachments = _collect_attachments(msg)
 
+        warnings: list[str] = []
+        counts: Counter[str] = Counter()
+
         extra: dict[str, str | int | float | bool | None] = {}
-        if from_addr:
-            extra["eml:from"] = from_addr
-        if to_addr:
-            extra["eml:to"] = to_addr
-        if cc_addr:
-            extra["eml:cc"] = cc_addr
-        if msg_id:
-            extra["eml:message_id"] = msg_id
+        for hdr_name, tag in {
+            **{"From": "from", "To": "to", "Cc": "cc", "Message-ID": "message_id"},
+            **_EXT_HEADERS,
+        }.items():
+            v = _safe_header(msg, hdr_name)
+            if v is None:
+                continue
+            clean = sanitize_scalar(v, limits=limits, counts=counts)
+            if clean is not None:
+                extra[f"eml:{tag}"] = clean
+
         if body_source:
             extra["eml:body_source"] = body_source
         if attachments:
-            # Comma-joined names + count; the full structured list isn't a
-            # schema field, so we keep extra values as scalars.
             extra["eml:has_attachments"] = True
             extra["eml:attachment_count"] = len(attachments)
             names = ",".join(str(a.get("name") or "<unnamed>") for a in attachments)
-            extra["eml:attachment_names"] = names
+            clean_names = sanitize_scalar(names, limits=limits, counts=counts)
+            if clean_names is not None:
+                extra["eml:attachment_names"] = clean_names
+        finalize_warnings(counts, warnings)
 
-        warnings: list[str] = []
         # Header-injection sentinel: stdlib decodes individual headers, but
         # if a user-supplied Subject was crafted to contain CRLF, flag it.
         for hdr in ("Subject", "From", "To", "Cc"):
@@ -183,6 +230,27 @@ class EmlExtractor(IExtractor):
             extra=extra,
         )
 
+        # Markdown path: prefer HTML alternative → sanitized markdown; else
+        # the plain body is markdown-by-identity. `cid:` / `mid:` inline
+        # references land in the sanitizer's URL-scheme allowlist and are
+        # unwrapped / stripped there — no per-extractor handling needed.
+        markdown: str | None = None
+        if emit_markdown:
+            html_alt = _extract_html_alternative(msg)
+            if html_alt:
+                from knovas_extract._markdown import check_expansion, html_to_markdown
+
+                markdown = html_to_markdown(html_alt, limits, warnings=warnings)
+                check_expansion(markdown, len(text), limits)
+            else:
+                markdown = text
+
+        sentences = None
+        if emit_sentences:
+            from knovas_extract._sentences import split_sentences
+
+            sentences = split_sentences(text, limits, warnings=warnings)
+
         return make_result(
             text=text,
             mime="message/rfc822",
@@ -191,6 +259,8 @@ class EmlExtractor(IExtractor):
             filename=filename,
             metadata=metadata,
             warnings=warnings,
+            markdown=markdown,
+            sentences=sentences,
         )
 
 

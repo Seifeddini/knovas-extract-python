@@ -53,6 +53,8 @@ class MsgExtractor(IExtractor):
         *,
         filename: str | None = None,
         limits: Limits | None = None,
+        emit_markdown: bool = False,
+        emit_sentences: bool = False,
     ) -> ExtractionResult:
         limits = limits or Limits()
         if len(data) > limits.max_input_bytes:
@@ -78,17 +80,21 @@ class MsgExtractor(IExtractor):
 
             try:
                 # Body preference: text/plain → HTML → RTF (which we surface as text).
+                # Capture raw htmlBody separately so the emit_markdown path can
+                # feed sanitized HTML through the shared markdown helper.
                 body = (msg.body or "").strip()
                 source = "text/plain" if body else ""
-                if not body:
-                    html_body = getattr(msg, "htmlBody", None) or ""
-                    if html_body:
-                        body = _strip_html(
-                            html_body.decode("utf-8", errors="replace")
-                            if isinstance(html_body, bytes)
-                            else html_body
-                        )
-                        source = "text/html"
+                raw_html_body: str = ""
+                raw_html_candidate = getattr(msg, "htmlBody", None) or ""
+                if raw_html_candidate:
+                    raw_html_body = (
+                        raw_html_candidate.decode("utf-8", errors="replace")
+                        if isinstance(raw_html_candidate, bytes)
+                        else raw_html_candidate
+                    )
+                if not body and raw_html_body:
+                    body = _strip_html(raw_html_body)
+                    source = "text/html"
                 if not body:
                     rtf_body = getattr(msg, "rtfBody", None) or b""
                     if rtf_body:
@@ -137,19 +143,55 @@ class MsgExtractor(IExtractor):
                     else (str(date) if date else None)
                 )
 
+                from collections import Counter
+
+                from knovas_extract._metadata import finalize_warnings, sanitize_scalar
+
+                warnings: list[str] = []
+                counts: Counter[str] = Counter()
+
                 extra: dict[str, str | int | float | bool | None] = {}
-                if sender:
-                    extra["msg:from"] = sender
-                if recipients:
-                    extra["msg:to"] = recipients
-                if msg.messageId:
-                    extra["msg:message_id"] = msg.messageId.strip()
+                for key, raw_val in (
+                    ("msg:from", sender),
+                    ("msg:to", recipients),
+                    ("msg:message_id", (msg.messageId or "").strip() if msg.messageId else None),
+                    ("msg:cc", getattr(msg, "cc", None)),
+                    ("msg:bcc", getattr(msg, "bcc", None)),
+                    ("msg:reply_to", getattr(msg, "replyTo", None)),
+                    ("msg:in_reply_to", getattr(msg, "inReplyTo", None)),
+                    ("msg:conversation_topic", getattr(msg, "conversationTopic", None)),
+                    ("msg:conversation_index", getattr(msg, "conversationIndex", None)),
+                    ("msg:categories", getattr(msg, "categories", None)),
+                    (
+                        "msg:sent_representing",
+                        getattr(msg, "sentRepresentingName", None)
+                        or getattr(msg, "sentRepresentingEmail", None),
+                    ),
+                ):
+                    if raw_val is None:
+                        continue
+                    clean = sanitize_scalar(raw_val, limits=limits, counts=counts)
+                    if clean is not None:
+                        extra[key] = clean
+
+                # Enum-ish fields — surface as ints when present.
+                importance = getattr(msg, "importance", None)
+                if isinstance(importance, int):
+                    extra["msg:importance"] = importance
+                sensitivity = getattr(msg, "sensitivity", None)
+                if isinstance(sensitivity, int):
+                    extra["msg:sensitivity"] = sensitivity
+
                 if source:
                     extra["msg:body_source"] = source
                 if attachments:
                     extra["msg:has_attachments"] = True
                     extra["msg:attachment_count"] = len(attachments)
-                    extra["msg:attachment_names"] = attachment_names
+                    clean_names = sanitize_scalar(attachment_names, limits=limits, counts=counts)
+                    if clean_names is not None:
+                        extra["msg:attachment_names"] = clean_names
+
+                finalize_warnings(counts, warnings)
 
                 metadata = Metadata(
                     title=subject,
@@ -159,6 +201,31 @@ class MsgExtractor(IExtractor):
                     extra=extra,
                 )
 
+                # Markdown path: prefer HTML body → sanitized markdown,
+                # else plain body as identity. RTF-only bodies leave
+                # markdown=None + warning (matches the RTF extractor's
+                # position — striprtf preserves no structure).
+                markdown: str | None = None
+                if emit_markdown:
+                    if raw_html_body:
+                        from knovas_extract._markdown import (
+                            check_expansion,
+                            html_to_markdown,
+                        )
+
+                        markdown = html_to_markdown(raw_html_body, limits, warnings=warnings)
+                        check_expansion(markdown, len(text), limits)
+                    elif source == "text/plain" and text:
+                        markdown = text
+                    else:
+                        warnings.append("msg: only RTF body available; content.markdown left null")
+
+                sentences = None
+                if emit_sentences:
+                    from knovas_extract._sentences import split_sentences
+
+                    sentences = split_sentences(text, limits, warnings=warnings)
+
                 return make_result(
                     text=text,
                     mime=MSG_MIME,
@@ -166,6 +233,9 @@ class MsgExtractor(IExtractor):
                     size_bytes=len(data),
                     filename=filename,
                     metadata=metadata,
+                    warnings=warnings or None,
+                    markdown=markdown,
+                    sentences=sentences,
                 )
             finally:
                 msg.close()

@@ -21,8 +21,12 @@ def main() -> None:
     LIMITS = Limits(max_input_bytes=1 << 20, max_text_bytes=1 << 20)
 
     def TestOneInput(data: bytes) -> None:
+        # Cover both text-only and emit_markdown paths — the sanitizer is
+        # the highest-risk surface for HTML.
         with contextlib.suppress(ExtractError):
             extract(data, mime="text/html", limits=LIMITS)
+        with contextlib.suppress(ExtractError):
+            extract(data, mime="text/html", limits=LIMITS, emit_markdown=True)
 
     atheris.Setup(sys.argv, TestOneInput)
     atheris.Fuzz()

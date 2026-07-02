@@ -30,13 +30,40 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Indent JSON output for human reading.",
     )
+    parser.add_argument(
+        "--emit-markdown",
+        action="store_true",
+        help=(
+            "Populate content.markdown with sanitized Markdown output "
+            "(requires the [markdown] extra for HTML-shaped inputs and "
+            "the [pdf] extra's pymupdf4llm for PDFs)."
+        ),
+    )
+    parser.add_argument(
+        "--emit-sentences",
+        action="store_true",
+        help=(
+            "Populate content.sentences with deterministic tokenization "
+            "(char offsets, line numbers, page/section back-pointers). "
+            "Requires the [sentences] extra (pysbd)."
+        ),
+    )
     args = parser.parse_args(argv)
 
     try:
-        result = extract(args.path, mime=args.mime)
+        result = extract(
+            args.path,
+            mime=args.mime,
+            emit_markdown=args.emit_markdown,
+            emit_sentences=args.emit_sentences,
+        )
     except ExtractError as exc:
         print(f"{type(exc).__name__}: {exc}", file=sys.stderr)
         return 1
+    except ValueError as exc:
+        # Path validation rejection — log-safe message from _paths.
+        print(f"ValueError: {exc}", file=sys.stderr)
+        return 2
 
     json.dump(
         result.to_dict(),

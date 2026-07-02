@@ -36,4 +36,6 @@ class IExtractor(Protocol):
         *,
         filename: str | None = None,
         limits: Limits | None = None,
+        emit_markdown: bool = False,
+        emit_sentences: bool = False,
     ) -> ExtractionResult: ...

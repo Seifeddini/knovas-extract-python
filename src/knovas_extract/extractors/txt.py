@@ -73,6 +73,8 @@ class TxtExtractor(IExtractor):
         *,
         filename: str | None = None,
         limits: Limits | None = None,
+        emit_markdown: bool = False,
+        emit_sentences: bool = False,
     ) -> ExtractionResult:
         limits = limits or Limits()
         if len(data) > limits.max_text_bytes:
@@ -80,6 +82,17 @@ class TxtExtractor(IExtractor):
 
         raw_text, charset = _decode(data)
         text = canonicalize_text(raw_text)
+
+        # Plain text is already valid Markdown source (no markup to preserve
+        # or reconstruct); emit as identity when asked.
+        markdown = text if emit_markdown else None
+
+        warnings: list[str] = []
+        sentences = None
+        if emit_sentences:
+            from knovas_extract._sentences import split_sentences
+
+            sentences = split_sentences(text, limits, warnings=warnings)
 
         return make_result(
             text=text,
@@ -91,6 +104,9 @@ class TxtExtractor(IExtractor):
                 word_count=word_count(text),
                 extra={"txt:charset_detected": charset} if charset else {},
             ),
+            markdown=markdown,
+            sentences=sentences,
+            warnings=warnings or None,
         )
 
 

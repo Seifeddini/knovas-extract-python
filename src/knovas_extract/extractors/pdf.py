@@ -32,12 +32,96 @@ from typing import TYPE_CHECKING, ClassVar, cast
 from knovas_extract.dispatch import MIME_REGISTRY, make_result
 from knovas_extract.errors import (
     CorruptDocumentError,
+    DependencyMissingError,
     EncryptedDocumentError,
     ResourceExhaustedError,
 )
 from knovas_extract.interfaces import IExtractor
 from knovas_extract.normalize import canonicalize_text, word_count
 from knovas_extract.result import ExtractionResult, Limits, Metadata, Page
+
+# PyMuPDF `doc.permissions` bitmask flags. See pdfmark spec + PyMuPDF docs.
+_PDF_PERM_TOKENS = (
+    (1 << 2, "print"),
+    (1 << 3, "modify"),
+    (1 << 4, "copy"),
+    (1 << 5, "annotate"),
+    (1 << 8, "form"),
+    (1 << 9, "accessibility"),
+    (1 << 10, "assemble"),
+    (1 << 11, "print_high_res"),
+)
+
+
+def _perm_tokens(bits: int | None) -> str | None:
+    if not bits:
+        return None
+    tokens = [name for mask, name in _PDF_PERM_TOKENS if bits & mask]
+    return ",".join(tokens) if tokens else None
+
+
+def _parse_xmp(xmp: str, limits: Limits, warnings: list[str]) -> dict[str, str]:
+    """Parse PDF XMP metadata (XML) via defusedxml, size-capped.
+
+    Returns a dict with any of: title, author, description, language,
+    creator_tool, pdfa_part. Empty dict on error / oversize / absence.
+    """
+    if not xmp:
+        return {}
+    if len(xmp) > limits.max_xmp_bytes:
+        warnings.append("pdf: xmp metadata exceeded max_xmp_bytes; skipped")
+        return {}
+
+    try:
+        from defusedxml import ElementTree as ET
+
+        root = ET.fromstring(xmp)
+    except Exception:
+        warnings.append("pdf: xmp metadata unparseable; skipped")
+        return {}
+
+    ns = {
+        "dc": "http://purl.org/dc/elements/1.1/",
+        "xmp": "http://ns.adobe.com/xap/1.0/",
+        "rdf": "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
+        "pdfaid": "http://www.aiim.org/pdfa/ns/id/",
+    }
+
+    def _text_deep(tag: str, prefix: str) -> str | None:
+        # dc: / xmp: fields are usually wrapped in rdf:Alt / rdf:Seq / rdf:li.
+        for el in root.iter(f"{{{ns[prefix]}}}{tag}"):
+            if el.text and el.text.strip():
+                return el.text.strip()
+            # Nested rdf:li.
+            for child in el.iter(f"{{{ns['rdf']}}}li"):
+                if child.text and child.text.strip():
+                    return child.text.strip()
+        return None
+
+    def _attr_deep(tag: str, prefix: str, attr_prefix: str, attr: str) -> str | None:
+        for el in root.iter(f"{{{ns[prefix]}}}{tag}"):
+            v = el.attrib.get(f"{{{ns[attr_prefix]}}}{attr}") or el.attrib.get(attr)
+            if v:
+                return v.strip() or None
+        return None
+
+    out: dict[str, str] = {}
+    for k, tag, pfx in (
+        ("title", "title", "dc"),
+        ("author", "creator", "dc"),
+        ("description", "description", "dc"),
+        ("language", "language", "dc"),
+        ("creator_tool", "CreatorTool", "xmp"),
+    ):
+        v = _text_deep(tag, pfx)
+        if v:
+            out[k] = v
+
+    part = _attr_deep("part", "pdfaid", "pdfaid", "part")
+    if part:
+        out["pdfa_part"] = part
+    return out
+
 
 if TYPE_CHECKING:
     import fitz
@@ -81,6 +165,42 @@ def _parse_pdf_date(s: str | None) -> str | None:
     return f"{year:04d}-{month:02d}-{day:02d}T{hour:02d}:{minute:02d}:{second:02d}{tz}"
 
 
+def _pdf_to_markdown(
+    doc: fitz.Document,
+    plain_text: str,
+    limits: Limits,
+    warnings: list[str],
+) -> str | None:
+    """Emit whole-doc markdown via pymupdf4llm, with URL allowlist + size guards.
+
+    Returns None (and appends a warning) on backend failure — never
+    silently substitutes plain text as if it were markdown.
+    """
+    try:
+        import pymupdf4llm
+    except ImportError as exc:
+        raise DependencyMissingError("pdf", "pymupdf4llm") from exc
+
+    from knovas_extract._markdown import apply_url_allowlist, check_expansion
+
+    try:
+        raw_md = pymupdf4llm.to_markdown(doc)
+    except Exception:
+        warnings.append("pdf: pymupdf4llm conversion failed; content.markdown left null")
+        return None
+
+    md = canonicalize_text(raw_md or "")
+
+    if len(md.encode("utf-8")) > limits.max_text_bytes:
+        raise ResourceExhaustedError("markdown size", limits.max_text_bytes, observed=len(md))
+    check_expansion(md, len(plain_text), limits)
+
+    # PDF annotation URLs are the primary risk: /URI actions with
+    # javascript: / file: schemes come through pymupdf4llm as clickable
+    # markdown links. Scrub via the shared allowlist.
+    return apply_url_allowlist(md, warnings=warnings)
+
+
 def _open_doc(data: bytes) -> fitz.Document:
     """Open the PDF, mapping every PyMuPDF failure mode to a typed ExtractError."""
     import fitz  # local import — keeps top-level startup cost flat
@@ -117,12 +237,19 @@ class PdfExtractor(IExtractor):
         *,
         filename: str | None = None,
         limits: Limits | None = None,
+        emit_markdown: bool = False,
+        emit_sentences: bool = False,
     ) -> ExtractionResult:
+        from collections import Counter
+
+        from knovas_extract._metadata import finalize_warnings, sanitize_scalar
+
         limits = limits or Limits()
         if len(data) > limits.max_input_bytes:
             raise ResourceExhaustedError("input size", limits.max_input_bytes, observed=len(data))
 
         warnings: list[str] = []
+        counts: Counter[str] = Counter()
         doc = _open_doc(data)
 
         try:
@@ -141,13 +268,6 @@ class PdfExtractor(IExtractor):
                 except Exception as exc:
                     warnings.append(f"page {i}: could not load ({exc})")
                     continue
-                # PDF JS detection — never executes, just notes presence.
-                # PyMuPDF exposes JS via page.get_text("dict") metadata or
-                # doc.is_form_pdf; for v1 we just check the doc-level flag once.
-                # get_text("text") returns str at runtime, but the stub
-                # overloads cover {"text", "dict", "blocks", ...} as
-                # str | list | dict. cast() satisfies pyright; mypy is
-                # silenced via the fitz ignore_missing_imports override.
                 page_text = cast("str", page.get_text("text") or "")
                 if not page_text and i == 0:
                     warnings.append("first page produced no text (consider OCR for scanned PDFs)")
@@ -172,27 +292,99 @@ class PdfExtractor(IExtractor):
 
             full_text = canonicalize_text("\n\n".join(text_chunks))
 
+            # Attach 1-based line coordinates to each Page by locating each
+            # page.text in full_text (they are identical after
+            # canonicalize_text, up to the "\n\n" join). The cursor keeps
+            # searches linear.
+            cursor = 0
+            for p in pages:
+                if not p.text:
+                    p.line_start = None
+                    p.line_end = None
+                    continue
+                loc = full_text.find(p.text, cursor)
+                if loc < 0:
+                    p.line_start = None
+                    p.line_end = None
+                    continue
+                p.line_start = 1 + full_text.count("\n", 0, loc)
+                p.line_end = 1 + full_text.count("\n", 0, loc + len(p.text) - 1)
+                cursor = loc + len(p.text)
+
+            # Markdown path — whole-doc via pymupdf4llm.
+            markdown: str | None = None
+            if emit_markdown:
+                markdown = _pdf_to_markdown(doc, full_text, limits, warnings)
+
             raw_meta = doc.metadata or {}
+
+            # XMP metadata — parsed via defusedxml with a size cap.
+            xmp_dict: dict[str, str] = {}
+            with contextlib.suppress(Exception):
+                xmp_raw = doc.get_xml_metadata() or ""
+                xmp_dict = _parse_xmp(xmp_raw, limits, warnings)
+
+            # Merge policy: XMP wins over the older doc.metadata dict when
+            # both are present and non-empty for the same first-class field.
+            title = xmp_dict.get("title") or (raw_meta.get("title") or "").strip() or None
+            author = xmp_dict.get("author") or (raw_meta.get("author") or "").strip() or None
+            language = xmp_dict.get("language") or None
+
+            extra: dict[str, str | int | float | bool | None] = {}
+            for k, v in {
+                "pdf:producer": (raw_meta.get("producer") or "").strip() or None,
+                "pdf:creator": (raw_meta.get("creator") or "").strip() or None,
+                "pdf:subject": (raw_meta.get("subject") or "").strip() or None,
+                "pdf:keywords": (raw_meta.get("keywords") or "").strip() or None,
+                "pdf:format": raw_meta.get("format"),
+                "pdf:xmp_description": xmp_dict.get("description"),
+                "pdf:xmp_creator_tool": xmp_dict.get("creator_tool"),
+                "pdf:pdfa_part": xmp_dict.get("pdfa_part"),
+            }.items():
+                if v is None:
+                    continue
+                clean = sanitize_scalar(v, limits=limits, counts=counts)
+                if clean is not None:
+                    extra[k] = clean
+
+            # PDF version, permissions, outline count, forms/annotations.
+            with contextlib.suppress(Exception):
+                pdf_version = getattr(doc, "pdf_version", None)
+                if callable(pdf_version):
+                    pv = pdf_version()
+                    if pv is not None:
+                        extra["pdf:pdf_version"] = str(pv)
+            with contextlib.suppress(Exception):
+                perms = _perm_tokens(getattr(doc, "permissions", 0))
+                if perms:
+                    extra["pdf:permissions"] = perms
+            with contextlib.suppress(Exception):
+                extra["pdf:outline_count"] = len(doc.get_toc())
+            with contextlib.suppress(Exception):
+                extra["pdf:is_form_pdf"] = bool(doc.is_form_pdf)
+
+            finalize_warnings(counts, warnings)
+
             metadata = Metadata(
-                title=(raw_meta.get("title") or "").strip() or None,
-                author=(raw_meta.get("author") or "").strip() or None,
-                language=None,  # PDF metadata rarely carries reliable lang
+                title=title,
+                author=author,
+                language=language,
                 created=_parse_pdf_date(raw_meta.get("creationDate")),
                 modified=_parse_pdf_date(raw_meta.get("modDate")),
                 page_count=page_count,
                 word_count=word_count(full_text),
-                extra={
-                    k: v
-                    for k, v in {
-                        "pdf:producer": (raw_meta.get("producer") or "").strip() or None,
-                        "pdf:creator": (raw_meta.get("creator") or "").strip() or None,
-                        "pdf:subject": (raw_meta.get("subject") or "").strip() or None,
-                        "pdf:keywords": (raw_meta.get("keywords") or "").strip() or None,
-                        "pdf:format": raw_meta.get("format"),
-                    }.items()
-                    if v
-                },
+                extra=extra,
             )
+
+            # Sentences — per-page tokenization stitched into
+            # document-global coords via split_sentences_for_pages.
+            sentences = None
+            if emit_sentences:
+                from knovas_extract._sentences import split_sentences_for_pages
+
+                sentences = split_sentences_for_pages(
+                    pages, full_text, limits, warnings=warnings, language=language
+                )
 
             return make_result(
                 text=full_text,
@@ -203,6 +395,8 @@ class PdfExtractor(IExtractor):
                 metadata=metadata,
                 pages=pages or None,
                 warnings=warnings,
+                markdown=markdown,
+                sentences=sentences,
             )
         finally:
             doc.close()

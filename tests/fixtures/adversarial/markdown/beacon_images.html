@@ -1,0 +1,13 @@
+<!DOCTYPE html>
+<html>
+<body>
+<p>Body text that keeps the plain-text length reasonable so the
+expansion-ratio guard does not fire when the sanitizer strips all the
+beacons below to alt text.</p>
+<img src="https://tracker.example/1x1.gif" alt="Q1_open">
+<img src="https://tracker.example/2x2.gif" alt="Q1_click">
+<img src="https://tracker.example/3x3.gif" alt="Q1_view">
+<img src="//protocol-relative.example/x.gif" alt="proto_rel">
+<img src="data:image/gif;base64,R0lGODlhAQABAA==" alt="base64_beacon">
+</body>
+</html>

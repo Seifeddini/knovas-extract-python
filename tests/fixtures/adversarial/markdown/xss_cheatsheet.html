@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html>
+<head><title>xss</title></head>
+<body>
+<p>real body text here</p>
+<script>alert('xss1')</script>
+<style>body { background: url("attacker.example/beacon"); }</style>
+<img src="javascript:alert('xss2')" alt="fallback">
+<iframe src="data:text/html,<script>alert('xss3')</script>"></iframe>
+<a href="javascript:alert('xss4')" onclick="alert('xss5')">click</a>
+<a href="data:text/html,<script>alert('xss6')</script>">click2</a>
+<a href="vbscript:msgbox('xss7')">click3</a>
+<a href="file:///etc/passwd">passwd</a>
+<a href="chrome-extension://abc/x">ext</a>
+<svg><foreignObject><script>alert('xss8')</script></foreignObject></svg>
+<math><mtext><script>alert('xss9')</script></mtext></math>
+<div onmouseover="alert('xss10')" style="background:expression(alert('xss11'))">t</div>
+<!-- [if IE]><script>alert('xss12')</script><![endif] -->
+</body>
+</html>

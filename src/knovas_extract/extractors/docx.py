@@ -124,21 +124,34 @@ def _extract_body_text(data: bytes) -> str:
     return "\n\n".join(parts)
 
 
-def _extract_sections(data: bytes) -> list[Section]:
-    """Heading-derived sections via mammoth → HTML → harvester."""
+def _extract_html(data: bytes) -> str | None:
+    """Convert DOCX bytes to HTML via mammoth. Returns None on backend failure.
+
+    Isolated so that both `_sections_from_html` and `_markdown_from_html`
+    can reuse the (relatively expensive) mammoth conversion output.
+    """
     import mammoth
 
     try:
         result = mammoth.convert_to_html(BytesIO(data))
     except Exception:
-        return []
+        return None
+    return result.value or ""
 
-    html = result.value or ""
+
+def _sections_from_html(html: str, canonical_text: str | None = None) -> list[Section]:
+    """Harvest heading-anchored sections from mammoth HTML output.
+
+    When ``canonical_text`` (== `content.text` we return) is provided,
+    each Section carries 1-based `line_start` / `line_end` in it — used
+    by the sentence↔section back-pointer and consumer citations.
+    """
     matches = list(_HEADING_HTML.finditer(html))
     if not matches:
         return []
 
     sections: list[Section] = []
+    canon_cursor = 0
     for i, m in enumerate(matches):
         level = int(m.group(1))
         heading = m.group(2).strip()
@@ -149,8 +162,47 @@ def _extract_sections(data: bytes) -> list[Section]:
         # otherwise consecutive <p>foo</p><p>bar</p> collapses to "foobar".
         body_html = re.sub(r"</(p|li|h[1-6]|tr|br)\s*>", "\n\n", body_html, flags=re.I)
         body_text = re.sub(r"<[^>]+>", "", body_html)
-        sections.append(Section(heading=heading, level=level, text=canonicalize_text(body_text)))
+
+        line_start: int | None = None
+        line_end: int | None = None
+        if canonical_text is not None:
+            hstart = canonical_text.find(heading, canon_cursor)
+            if hstart >= 0:
+                line_start = 1 + canonical_text.count("\n", 0, hstart)
+                next_pos = len(canonical_text)
+                for j in range(i + 1, len(matches)):
+                    nh = matches[j].group(2).strip()
+                    n = canonical_text.find(nh, hstart + len(heading))
+                    if n >= 0:
+                        next_pos = n
+                        break
+                line_end = 1 + canonical_text.count("\n", 0, max(next_pos - 1, hstart))
+                canon_cursor = hstart + len(heading)
+
+        sections.append(
+            Section(
+                heading=heading,
+                level=level,
+                text=canonicalize_text(body_text),
+                line_start=line_start,
+                line_end=line_end,
+            )
+        )
     return sections
+
+
+def _markdown_from_html(html: str, limits: Limits, warnings: list[str]) -> str:
+    """Sanitize mammoth's HTML output and convert to Markdown.
+
+    Even though mammoth emits structurally-clean HTML, we still route
+    through the full sanitizer because <a href> URLs come from the source
+    document verbatim — a hostile DOCX can embed `javascript:` links, and
+    mammoth surfaces Word "Text Box" content as raw HTML fragments in
+    some documents.
+    """
+    from knovas_extract._markdown import html_to_markdown
+
+    return html_to_markdown(html, limits, warnings=warnings)
 
 
 def _extract_core_metadata(zf: zipfile.ZipFile) -> dict[str, str | None]:
@@ -191,6 +243,49 @@ def _extract_core_metadata(zf: zipfile.ZipFile) -> dict[str, str | None]:
         "modified": text_of("modified", "dcterms"),
         "revision": text_of("revision", "cp"),
         "last_modified_by": text_of("lastModifiedBy", "cp"),
+        "category": text_of("category", "cp"),
+        "content_status": text_of("contentStatus", "cp"),
+        "version": text_of("version", "cp"),
+    }
+
+
+def _extract_app_metadata(zf: zipfile.ZipFile) -> dict[str, str | None]:
+    """Pull docProps/app.xml fields via defusedxml.
+
+    Optional per the OOXML spec — many DOCX files (especially those from
+    non-Microsoft producers) omit app.xml entirely. Absence is not an
+    error; returns an empty dict.
+    """
+    from defusedxml import ElementTree as ET
+
+    try:
+        with zf.open("docProps/app.xml") as f:
+            tree = ET.parse(f)
+    except KeyError:
+        return {}
+    except Exception as exc:
+        raise CorruptDocumentError(f"docProps/app.xml unparseable: {exc}") from exc
+
+    ns = "http://schemas.openxmlformats.org/officeDocument/2006/extended-properties"
+    root = tree.getroot()
+
+    def text_of(tag: str) -> str | None:
+        el = root.find(f"{{{ns}}}{tag}")
+        if el is not None and el.text:
+            return el.text.strip() or None
+        return None
+
+    return {
+        "application": text_of("Application"),
+        "app_version": text_of("AppVersion"),
+        "template": text_of("Template"),
+        "total_time": text_of("TotalTime"),
+        "pages_declared": text_of("Pages"),
+        "paragraph_count": text_of("Paragraphs"),
+        "word_count_declared": text_of("Words"),
+        "character_count": text_of("Characters"),
+        "company": text_of("Company"),
+        "manager": text_of("Manager"),
     }
 
 
@@ -206,22 +301,24 @@ class DocxExtractor(IExtractor):
         *,
         filename: str | None = None,
         limits: Limits | None = None,
+        emit_markdown: bool = False,
+        emit_sentences: bool = False,
     ) -> ExtractionResult:
+        from collections import Counter
+
+        from knovas_extract._metadata import finalize_warnings, sanitize_scalar
+
         limits = limits or Limits()
         if len(data) > limits.max_input_bytes:
             raise ResourceExhaustedError("input size", limits.max_input_bytes, observed=len(data))
 
         warnings: list[str] = []
+        counts: Counter[str] = Counter()
         zf = _guard_zip(data, limits)
         try:
             # Detect (but never execute) macros.
             if "word/vbaProject.bin" in zf.namelist():
                 warnings.append("DOCX contains VBA macros; payload ignored (never executed)")
-            # Detect external relationships (template injection vector).
-            if any(name.startswith("word/_rels/") for name in zf.namelist()):
-                # Only warn if external targets are declared — most docs have
-                # internal _rels which are harmless.
-                pass
 
             body = _extract_body_text(data)
             text = canonicalize_text(body)
@@ -229,16 +326,61 @@ class DocxExtractor(IExtractor):
             if len(text.encode("utf-8")) > limits.max_text_bytes:
                 raise ResourceExhaustedError("text size", limits.max_text_bytes, observed=len(text))
 
-            sections = _extract_sections(data)
+            # Call mammoth ONCE and derive both sections and (optionally)
+            # markdown from the same HTML. Cheaper than double-converting.
+            html = _extract_html(data)
+            sections = _sections_from_html(html, canonical_text=text) if html else []
+
+            markdown: str | None = None
+            if emit_markdown:
+                if html is None:
+                    warnings.append("docx: mammoth conversion failed; content.markdown left null")
+                else:
+                    from knovas_extract._markdown import check_expansion
+
+                    markdown = _markdown_from_html(html, limits, warnings)
+                    check_expansion(markdown, len(text), limits)
+
             meta = _extract_core_metadata(zf)
+            app = _extract_app_metadata(zf)
         finally:
             zf.close()
 
         extra: dict[str, str | int | float | bool | None] = {}
-        for k in ("subject", "keywords", "revision", "last_modified_by"):
+        # Core.xml extras.
+        for k in (
+            "subject",
+            "keywords",
+            "revision",
+            "last_modified_by",
+            "category",
+            "content_status",
+            "version",
+        ):
             v = meta.get(k)
             if v:
-                extra[f"docx:{k}"] = v
+                clean = sanitize_scalar(v, limits=limits, counts=counts)
+                if clean is not None:
+                    extra[f"docx:{k}"] = clean
+        # App.xml extras.
+        for k in (
+            "application",
+            "app_version",
+            "template",
+            "total_time",
+            "pages_declared",
+            "paragraph_count",
+            "word_count_declared",
+            "character_count",
+            "company",
+            "manager",
+        ):
+            v = app.get(k)
+            if v:
+                clean = sanitize_scalar(v, limits=limits, counts=counts)
+                if clean is not None:
+                    extra[f"docx:{k}"] = clean
+        finalize_warnings(counts, warnings)
 
         metadata = Metadata(
             title=meta.get("title"),
@@ -250,6 +392,12 @@ class DocxExtractor(IExtractor):
             extra=extra,
         )
 
+        sentences = None
+        if emit_sentences:
+            from knovas_extract._sentences import split_sentences
+
+            sentences = split_sentences(text, limits, warnings=warnings, language=metadata.language)
+
         return make_result(
             text=text,
             mime=DOCX_MIME,
@@ -259,6 +407,8 @@ class DocxExtractor(IExtractor):
             metadata=metadata,
             sections=sections or None,
             warnings=warnings,
+            markdown=markdown,
+            sentences=sentences,
         )
 
 

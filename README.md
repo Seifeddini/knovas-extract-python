@@ -27,6 +27,8 @@ That's the whole library. It does **not** chunk, embed, upload to Semantix, or t
 pip install knovas-extract                       # core only (TXT/MD/HTML/EML)
 pip install 'knovas-extract[pdf]'                # + PyMuPDF (AGPL — read NOTICE)
 pip install 'knovas-extract[docx,msg,rtf]'       # + DOCX/MSG/RTF
+pip install 'knovas-extract[markdown]'           # + emit_markdown=True (sanitized MD)
+pip install 'knovas-extract[sentences]'          # + emit_sentences=True (pysbd, MIT)
 pip install 'knovas-extract[all]'                # everything
 ```
 
@@ -56,6 +58,94 @@ result = extract(data, mime="application/pdf")
 
 `ExtractionResult.to_dict()` round-trips through the spec's JSON Schema; pass it directly to anything expecting the contract shape.
 
+### Markdown output (opt-in, sanitized)
+
+Pass `emit_markdown=True` to populate `content.markdown` with a whole-document Markdown rendering. Requires the `[markdown]` extra (adds `markdownify`); PDFs additionally require `pymupdf4llm`, which ships in the `[pdf]` extra.
+
+```python
+result = extract("report.docx", emit_markdown=True)
+print(result.content.markdown)   # ATX headings, - bullets, **bold**, tables
+```
+
+Emitted Markdown is **sanitized before conversion**: `<script>`, `<style>`, `<iframe>`, `<object>`, `<embed>`, `<applet>`, `<svg>`, `<math>`, HTML comments, and event-handler attributes are stripped with their contents; `<a href>` URLs are gated by an allowlist of `http`, `https`, `mailto`, `tel`; `<img>` is emitted as alt-text only so downstream renderers cannot beacon on render. See [SECURITY.md → Markdown emission](SECURITY.md) for the full contract. RTF, and formats without recoverable structure, leave `content.markdown = None` with a warning explaining why.
+
+### Sentences with line + page + section citations (opt-in)
+
+Pass `emit_sentences=True` to populate `content.sentences` with a
+deterministic tokenization. Every `Sentence` carries an exact char
+slice, a 1-based line window (into `content.text`), an optional page
+number, and a back-pointer to the enclosing `Section`. Requires the
+`[sentences]` extra (adds `pysbd`, MIT).
+
+```python
+result = extract("report.pdf", emit_sentences=True)
+
+for s in result.content.sentences:
+    print(f"[p{s.page_number or '-'}:L{s.line_start}] {s.text}")
+    # Exact retrieval:
+    assert result.content.text[s.char_start : s.char_end] == s.text
+```
+
+**Guaranteed contracts** (asserted on every result — never "best
+effort"):
+
+- `content.text[s.char_start : s.char_end] == s.text` — byte-for-byte
+  exact retrieval.
+- `line_start`/`line_end` are 1-based indexes into `content.text`; the
+  window `[line_start, line_end]` contains `s.text` as a substring.
+- Sentences appear in reading order; non-overlapping; `index` is
+  monotonic 0-based.
+- When `content.pages` is present (PDF), every sentence has a non-null
+  `page_index` **and** `page_number` (with `page_number == page_index +
+  1`). When absent, both are `None` — never fabricated.
+- When `content.sections` is present, `section_index` points to the
+  **innermost** (most specific) enclosing section, or `None` for
+  sentences before the first heading.
+- Same bytes → same sentences, byte-identical. No timestamps, no
+  randomness.
+
+For the full contract reference (including chunk-and-cite recipes and
+per-format fidelity), see [docs/citations.md](docs/citations.md). For a
+complete walked-through **example of what the library returns for a
+PDF**, see [docs/example-pdf-output.md](docs/example-pdf-output.md).
+
+### Source path — where did this document come from?
+
+Pass `path=` (or use a path-like input) and it flows to `Source.path`
+verbatim so downstream citations can identify the source:
+
+```python
+# Automatic — from a path-like input:
+r = extract("reports/q4.pdf")
+r.source.path       # "reports/q4.pdf"
+
+# Explicit — for bytes input:
+data = open("reports/q4.pdf", "rb").read()
+r = extract(data, mime="application/pdf", path="reports/q4.pdf")
+r.source.path       # "reports/q4.pdf"
+```
+
+`Source.path` is caller-supplied metadata — `knovas-extract` never
+opens, canonicalizes, or resolves it. It **is** validated to reject
+inputs that would corrupt logs / terminals: NUL bytes, ASCII control
+characters (`\n`, `\r`, ANSI escapes), Unicode bidi-override characters
+(CVE-2021-42574 Trojan Source), and lengths over
+`Limits.max_path_length` (default 4096). Rejections raise `ValueError`
+with a class-of-violation message that never contains the offending
+payload — re-logging the exception is safe.
+
+Full reference including per-format metadata gap-fill:
+[docs/metadata-and-paths.md](docs/metadata-and-paths.md).
+
+### CLI
+
+```bash
+knovas-extract reports/q4.pdf --emit-sentences --emit-markdown --pretty
+```
+
+Emits the full `ExtractionResult` as JSON to stdout. `--emit-sentences`
+and `--emit-markdown` are independent opt-ins.
+
 ## Resource limits
 
 Every extraction is bounded. Override the defaults per call:
@@ -70,6 +160,10 @@ result = extract(
         max_pages=1_000,
         max_decompression_ratio=50,
         max_text_bytes=10 * 1024 * 1024,
+        max_sentences=10_000,                # explicit DoS cap on sentence array
+        max_metadata_value_length=1024,      # per-scalar cap in Metadata.extra
+        max_xmp_bytes=256 * 1024,            # PDF XMP metadata size cap
+        max_path_length=1024,                # Source.path length cap
     ),
 )
 ```
@@ -88,6 +182,10 @@ Every call either returns an `ExtractionResult` or raises a subclass of `Extract
 | `ResourceExhaustedError` | A `Limits` threshold was crossed. |
 | `DependencyMissingError` | An optional extra isn't installed — exception tells you the exact install command. |
 
+Plus one stdlib exception: `ValueError` from `Source.path` validation
+(caller misuse, distinct from document corruption). See
+[docs/metadata-and-paths.md](docs/metadata-and-paths.md) for the full policy.
+
 No bare exceptions, no `None`, no `Optional[ExtractionResult]`.
 
 ## Security promises (enforced by CI)
@@ -102,7 +200,7 @@ For untrusted inputs, run inside a sandbox. Copy-paste recipes for `nsjail`, `bu
 
 ## Spec conformance
 
-This implementation conforms to `spec_version = 1.0.0` of [`knovas/KnowledgeBase/clients/extraction/spec`](https://github.com/knovas/KnowledgeBase/tree/develop/clients/extraction/spec). The pinned spec sha is recorded in `tests/spec/` (Git submodule). Every release runs the spec's golden corpus + adversarial corpus before tagging.
+This implementation conforms to `spec_version = 1.2.0` of [`knovas/KnowledgeBase/clients/extraction/spec`](https://github.com/knovas/KnowledgeBase/tree/develop/clients/extraction/spec). The pinned spec sha is recorded in `tests/spec/` (Git submodule). Every release runs the spec's golden corpus + adversarial corpus before tagging.
 
 To run the golden tests locally against a sibling KnowledgeBase checkout:
 

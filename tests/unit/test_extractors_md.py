@@ -36,8 +36,8 @@ def test_frontmatter_unknown_keys_go_to_extra() -> None:
     src = b"---\ntitle: T\ntags: foo\nproject: knovas\n---\n\nBody."
     r = extract(src, mime="text/markdown")
     assert r.metadata.title == "T"
-    assert r.metadata.extra.get("md:tags") == "foo"
-    assert r.metadata.extra.get("md:project") == "knovas"
+    assert r.metadata.extra.get("md:frontmatter.tags") == "foo"
+    assert r.metadata.extra.get("md:frontmatter.project") == "knovas"
 
 
 @pytest.mark.unit

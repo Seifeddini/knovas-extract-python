@@ -37,6 +37,7 @@ from knovas_extract.result import (
     Metadata,
     Page,
     Section,
+    Sentence,
     Source,
 )
 
@@ -77,23 +78,30 @@ _LAZY_LOADERS: dict[str, str] = {
 InputT = Union[str, "os.PathLike[str]", bytes, bytearray, memoryview]
 
 
-def _read_input(input: InputT, limits: Limits) -> tuple[bytes, str | None]:
-    """Return (bytes, filename-or-None). Enforces max_input_bytes."""
+def _read_input(input: InputT, limits: Limits) -> tuple[bytes, str | None, str | None]:
+    """Return (bytes, filename-or-None, path-or-None). Enforces max_input_bytes.
+
+    ``path`` preserves the caller's argv form (absolute stays absolute,
+    relative stays relative). ``None`` when input was bytes.
+    """
     if isinstance(input, bytes | bytearray | memoryview):
         data = bytes(input)
         filename = None
+        argv_path: str | None = None
     else:
-        path = Path(os.fspath(input))
+        raw = os.fspath(input)
+        path = Path(raw)
         size = path.stat().st_size
         if size > limits.max_input_bytes:
             raise ResourceExhaustedError("input size", limits.max_input_bytes, observed=size)
         with path.open("rb") as f:
             data = f.read()
         filename = path.name
+        argv_path = raw
 
     if len(data) > limits.max_input_bytes:
         raise ResourceExhaustedError("input size", limits.max_input_bytes, observed=len(data))
-    return data, filename
+    return data, filename, argv_path
 
 
 # MIME canonicalization map — libmagic versions across Linux/macOS/Windows
@@ -206,12 +214,14 @@ def _get_extractor(mime: str) -> IExtractor:
             extra_map = {
                 "fitz": "pdf",
                 "pymupdf": "pdf",
+                "pymupdf4llm": "pdf",
                 "docx": "docx",
                 "mammoth": "docx",
                 "extract_msg": "msg",
                 "selectolax": "html",
                 "striprtf": "rtf",
                 "frontmatter": "md",
+                "markdownify": "markdown",
             }
             extra = extra_map.get(missing, mime.split("/")[-1])
             raise DependencyMissingError(extra, missing) from exc
@@ -226,6 +236,9 @@ def extract(
     *,
     mime: str | None = None,
     limits: Limits | None = None,
+    emit_markdown: bool = False,
+    emit_sentences: bool = False,
+    path: str | None = None,
 ) -> ExtractionResult:
     """Extract text + metadata from a document.
 
@@ -233,16 +246,37 @@ def extract(
         input:  Path-like (str / os.PathLike) OR raw bytes / bytearray / memoryview.
         mime:   Optional explicit MIME type. If None, detected from content.
         limits: Optional Limits override. Defaults are conservative; see Limits.
+        emit_markdown: When True, populate `content.markdown` with a sanitized
+            Markdown rendering of the document (whole-doc, not per-page).
+            Sanitization is applied via `_markdown.html_to_markdown` — see
+            SECURITY.md. Some formats have no structure to convert
+            (e.g. RTF via striprtf) and will leave `content.markdown = None`
+            with a warning explaining why. Defaults to False for zero-cost
+            behavior parity with 1.0.0.
+        emit_sentences: When True, populate `content.sentences` with a
+            deterministic pysbd-based tokenization carrying exact char
+            offsets + line coordinates + page/section back-pointers. See
+            docs/citations.md for the full contract. Defaults to False for
+            zero-cost behavior parity with 1.1.0.
+        path: Optional caller-supplied source path. When ``input`` is
+            path-like, dispatch auto-populates this from the argv form
+            (absolute stays absolute); an explicit ``path=`` overrides.
+            Validated by `_paths.validate_source_path` — rejects NUL, ASCII
+            control chars, Unicode bidi-override chars (Trojan Source),
+            and lengths over ``Limits.max_path_length``.
 
     Returns:
         ExtractionResult — guaranteed to validate against spec/schema.json.
 
     Raises:
         UnsupportedFormatError, CorruptDocumentError, EncryptedDocumentError,
-        ResourceExhaustedError, DependencyMissingError.
+        ResourceExhaustedError, DependencyMissingError, ValueError (path).
     """
+    from knovas_extract._paths import validate_source_path
+
     limits = limits or Limits()
-    data, filename = _read_input(input, limits)
+    data, filename, argv_path = _read_input(input, limits)
+    resolved_path = validate_source_path(path if path is not None else argv_path, limits)
 
     detected_mime = mime or _detect_mime(data, filename)
     extractor = _get_extractor(detected_mime)
@@ -252,18 +286,27 @@ def extract(
     # the backend isn't installed at call time, an ImportError escapes the
     # extractor and would break the contract — re-frame as DependencyMissingError.
     try:
-        result = extractor.extract(data, filename=filename, limits=limits)
+        result = extractor.extract(
+            data,
+            filename=filename,
+            limits=limits,
+            emit_markdown=emit_markdown,
+            emit_sentences=emit_sentences,
+        )
     except ImportError as exc:
         missing = getattr(exc, "name", "unknown")
         extra_map = {
             "fitz": "pdf",
             "pymupdf": "pdf",
+            "pymupdf4llm": "pdf",
             "docx": "docx",
             "mammoth": "docx",
             "extract_msg": "msg",
             "selectolax": "html",
             "striprtf": "rtf",
             "frontmatter": "md",
+            "markdownify": "markdown",
+            "pysbd": "sentences",
         }
         extra = extra_map.get(missing, detected_mime.split("/")[-1])
         raise DependencyMissingError(extra, missing) from exc
@@ -279,6 +322,7 @@ def extract(
             sha256=hashlib.sha256(data).hexdigest(),
             size_bytes=len(data),
             filename=filename,
+            path=resolved_path,
         ),
     )
     object.__setattr__(result, "spec_version", _SPEC_VERSION)
@@ -290,7 +334,81 @@ def extract(
             version=_PACKAGE_VERSION,
         ),
     )
+
+    # Defense-in-depth: if an extractor populated `content.markdown` on the
+    # emit_markdown path, run a final URL-scheme scrub on it. Catches
+    # regressions in a per-extractor path (e.g. pymupdf4llm surfacing a
+    # javascript: annotation URL, a future extractor that forgets the helper).
+    if emit_markdown and result.content.markdown is not None:
+        from knovas_extract._markdown import apply_url_allowlist
+
+        cleaned = apply_url_allowlist(result.content.markdown, warnings=result.warnings)
+        if cleaned is not result.content.markdown:
+            result.content.markdown = cleaned
+
+    # Sentence↔section back-pointer + post-condition invariants.
+    if emit_sentences:
+        from knovas_extract._sentences import attach_section_indices
+
+        if result.content.sentences is None:
+            # Extractor forgot to emit — either the format has no text
+            # (RTF, etc.) or the extractor path is stale. Give consumers
+            # the "opted-in and got nothing" signal, not None.
+            result.content.sentences = []
+        attach_section_indices(result.content.sentences, result.content.sections)
+        _assert_consumer_contracts(result)
+
     return result
+
+
+def _assert_consumer_contracts(result: ExtractionResult) -> None:
+    """Producer-side post-conditions on the sentence array.
+
+    Any violation is a producer bug (extractor wired sentences without
+    honoring the contract). Raise RuntimeError so it's noisy in tests
+    and impossible to silently ship.
+    """
+    sentences = result.content.sentences
+    if not sentences:
+        return
+
+    text = result.content.text
+    pages = result.content.pages
+    sections = result.content.sections
+
+    for i, s in enumerate(sentences):
+        # 1. Exact retrieval.
+        if text[s.char_start : s.char_end] != s.text:
+            raise RuntimeError(f"sentence {s.index}: exact-retrieval invariant violated")
+
+        # 2. Sentence↔page linkage.
+        if pages is not None:
+            if s.page_index is None or s.page_number is None:
+                raise RuntimeError(
+                    f"sentence {s.index}: pages present but page_index/number is None"
+                )
+            if s.page_number != s.page_index + 1:
+                raise RuntimeError(
+                    f"sentence {s.index}: page_number ({s.page_number}) != "
+                    f"page_index+1 ({s.page_index + 1})"
+                )
+        else:
+            if s.page_index is not None or s.page_number is not None:
+                raise RuntimeError(f"sentence {s.index}: pages is None but page coords fabricated")
+
+        # 3. Sentence↔section linkage bounds.
+        if s.section_index is not None and (
+            sections is None or not (0 <= s.section_index < len(sections))
+        ):
+            raise RuntimeError(f"sentence {s.index}: section_index {s.section_index} out of range")
+
+        # 4. Ordering.
+        if i > 0 and s.char_start < sentences[i - 1].char_end:
+            raise RuntimeError(f"sentence {s.index}: char_start overlaps predecessor")
+
+        # 5. Index monotonicity.
+        if s.index != i:
+            raise RuntimeError(f"sentence at position {i} has index {s.index}")
 
 
 # Re-export the canonical "empty" result builder so extractors can start from a
@@ -302,16 +420,31 @@ def make_result(
     sha256: str,
     size_bytes: int,
     filename: str | None = None,
+    path: str | None = None,
     metadata: Metadata | None = None,
     pages: list[Page] | None = None,
     sections: list[Section] | None = None,
     warnings: list[str] | None = None,
+    markdown: str | None = None,
+    sentences: list[Sentence] | None = None,
 ) -> ExtractionResult:
     return ExtractionResult(
         spec_version=_SPEC_VERSION,
-        source=Source(mime_type=mime, sha256=sha256, size_bytes=size_bytes, filename=filename),
+        source=Source(
+            mime_type=mime,
+            sha256=sha256,
+            size_bytes=size_bytes,
+            filename=filename,
+            path=path,
+        ),
         metadata=metadata or Metadata(),
-        content=Content(text=text, pages=pages, sections=sections),
+        content=Content(
+            text=text,
+            pages=pages,
+            sections=sections,
+            markdown=markdown,
+            sentences=sentences,
+        ),
         warnings=warnings or [],
         extractor=Extractor(name="knovas-extract-python", version=_PACKAGE_VERSION),
     )
