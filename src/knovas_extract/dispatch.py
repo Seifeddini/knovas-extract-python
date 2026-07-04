@@ -427,6 +427,7 @@ def make_result(
     warnings: list[str] | None = None,
     markdown: str | None = None,
     sentences: list[Sentence] | None = None,
+    tables=None,
 ) -> ExtractionResult:
     return ExtractionResult(
         spec_version=_SPEC_VERSION,
@@ -444,6 +445,7 @@ def make_result(
             sections=sections,
             markdown=markdown,
             sentences=sentences,
+            tables=tables,
         ),
         warnings=warnings or [],
         extractor=Extractor(name="knovas-extract-python", version=_PACKAGE_VERSION),

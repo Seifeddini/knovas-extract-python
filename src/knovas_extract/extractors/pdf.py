@@ -201,6 +201,160 @@ def _pdf_to_markdown(
     return apply_url_allowlist(md, warnings=warnings)
 
 
+# ---------- structured tables (spec 1.1.0+) ----------
+
+_TABLE_CELL_MAX_CHARS = 1024
+_TABLE_MAX_ROWS = 5000
+_TABLE_MAX_COLS = 64
+_TABLES_MAX_PER_DOC = 50
+
+
+def _cap_pdf_cell(v, warnings: list[str], t_idx: int, page_1based: int, row_hint: str) -> str:
+    if v is None:
+        return ""
+    s = str(v).strip()
+    if len(s) <= _TABLE_CELL_MAX_CHARS:
+        return s
+    warnings.append(
+        f"pdf: tables[{t_idx}].{row_hint} truncated at {_TABLE_CELL_MAX_CHARS} chars (page {page_1based})"
+    )
+    return s[:_TABLE_CELL_MAX_CHARS]
+
+
+def _extract_structured_tables_from_pdf(doc, warnings: list[str]):
+    """Iterate pages, call PyMuPDF.find_tables(), materialize as `Table` list.
+
+    Failures during table detection on a single page are demoted to warnings —
+    they must not fail the whole extraction. `page.find_tables()` was added in
+    PyMuPDF 1.23; older builds raise AttributeError and this helper returns [].
+    """
+    from ..result import Table
+
+    tables: list = []
+    t_idx = 0
+
+    for page_index in range(doc.page_count):
+        if len(tables) >= _TABLES_MAX_PER_DOC:
+            warnings.append(
+                f"pdf: table extraction stopped at {_TABLES_MAX_PER_DOC} tables (spec cap)"
+            )
+            break
+        try:
+            page = doc.load_page(page_index)
+        except Exception as exc:
+            warnings.append(f"pdf: page {page_index} could not load for table scan ({type(exc).__name__})")
+            continue
+        try:
+            finder = page.find_tables()
+        except AttributeError:
+            # PyMuPDF too old (< 1.23) — no table API. Return what we've got.
+            warnings.append("pdf: table extraction unavailable (PyMuPDF too old, needs >= 1.23)")
+            return tables
+        except Exception as exc:
+            # Never leak the raw exception message — PyMuPDF errors can carry
+            # cell contents. Log the exception CLASS only.
+            warnings.append(
+                f"pdf: table detection failed on page {page_index + 1} ({type(exc).__name__})"
+            )
+            continue
+
+        found = getattr(finder, "tables", None) or []
+        for on_page_idx, tbl in enumerate(found):
+            if len(tables) >= _TABLES_MAX_PER_DOC:
+                warnings.append(
+                    f"pdf: table extraction stopped at {_TABLES_MAX_PER_DOC} tables (spec cap)"
+                )
+                return tables
+            try:
+                raw_rows = tbl.extract()
+            except Exception as exc:
+                warnings.append(
+                    f"pdf: table extract failed on page {page_index + 1}, table {on_page_idx} ({type(exc).__name__})"
+                )
+                continue
+
+            if not raw_rows:
+                continue
+
+            # Headers: prefer explicit tbl.header.names when PyMuPDF's heuristic
+            # identifies a header row; fall back to row[0].
+            hdr_names = None
+            try:
+                header = getattr(tbl, "header", None)
+                if header is not None and getattr(header, "names", None):
+                    hdr_names = list(header.names)
+            except Exception:
+                hdr_names = None
+
+            data_rows = raw_rows
+            if hdr_names is None:
+                hdr_names = raw_rows[0]
+                data_rows = raw_rows[1:]
+
+            headers = [
+                _cap_pdf_cell(h if h is not None else f"col_{i}",
+                              warnings, t_idx, page_index + 1, f"header[{i}]")
+                for i, h in enumerate(hdr_names)
+            ]
+            headers = [h if h else f"col_{i}" for i, h in enumerate(headers)]
+
+            if len(headers) > _TABLE_MAX_COLS:
+                warnings.append(
+                    f"pdf: tables[{t_idx}] column count {len(headers)} exceeds spec cap {_TABLE_MAX_COLS} — truncated (page {page_index + 1})"
+                )
+                headers = headers[:_TABLE_MAX_COLS]
+
+            n_cols = len(headers)
+            if n_cols == 0:
+                continue
+
+            rows_out: list[list[str]] = []
+            for r_idx, raw_row in enumerate(data_rows):
+                if len(rows_out) >= _TABLE_MAX_ROWS:
+                    warnings.append(
+                        f"pdf: tables[{t_idx}] row count exceeded spec cap {_TABLE_MAX_ROWS} — truncated (page {page_index + 1})"
+                    )
+                    break
+                raw_list = list(raw_row) if raw_row is not None else []
+                if len(raw_list) < n_cols:
+                    raw_list = raw_list + [""] * (n_cols - len(raw_list))
+                elif len(raw_list) > n_cols:
+                    raw_list = raw_list[:n_cols]
+                cells = [
+                    _cap_pdf_cell(c, warnings, t_idx, page_index + 1, f"rows[{r_idx}][{ci}]")
+                    for ci, c in enumerate(raw_list)
+                ]
+                if any(cells):
+                    rows_out.append(cells)
+
+            if not rows_out:
+                continue
+
+            # bbox: (x0, y0, x1, y1) in the page coordinate system when available.
+            bbox: tuple[float, float, float, float] | None = None
+            try:
+                raw_bbox = getattr(tbl, "bbox", None)
+                if raw_bbox is not None and len(raw_bbox) == 4:
+                    bbox = (float(raw_bbox[0]), float(raw_bbox[1]),
+                            float(raw_bbox[2]), float(raw_bbox[3]))
+            except Exception:
+                bbox = None
+
+            tables.append(
+                Table(
+                    client_table_hint=f"pdf_p{page_index + 1}_t{on_page_idx}",
+                    title=None,
+                    headers=headers,
+                    rows=rows_out,
+                    page=page_index + 1,
+                    bbox=bbox,
+                )
+            )
+            t_idx += 1
+
+    return tables
+
+
 def _open_doc(data: bytes) -> fitz.Document:
     """Open the PDF, mapping every PyMuPDF failure mode to a typed ExtractError."""
     import fitz  # local import — keeps top-level startup cost flat
@@ -386,6 +540,14 @@ class PdfExtractor(IExtractor):
                     pages, full_text, limits, warnings=warnings, language=language
                 )
 
+            # Structured tables (spec 1.1.0+) — never let table extraction fail
+            # the whole document; demote to a warning.
+            try:
+                tables = _extract_structured_tables_from_pdf(doc, warnings)
+            except Exception as exc:
+                tables = []
+                warnings.append(f"pdf: structured table pass failed ({type(exc).__name__})")
+
             return make_result(
                 text=full_text,
                 mime="application/pdf",
@@ -397,6 +559,7 @@ class PdfExtractor(IExtractor):
                 warnings=warnings,
                 markdown=markdown,
                 sentences=sentences,
+                tables=tables or None,
             )
         finally:
             doc.close()

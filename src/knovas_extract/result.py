@@ -119,12 +119,37 @@ class Sentence:
 
 
 @dataclass(slots=True)
+class Table:
+    """One structured table detected in a document (spec 1.1.0+).
+
+    `client_table_hint` is a stable extractor-supplied label for correlation
+    across pipeline stages (e.g. "pdf_p3_t0"). It is NOT a canonical id —
+    downstream consumers such as the Knovas server derive a canonical
+    `table_id` from `(tenant, document, this hint, table_index)` so client
+    hints cannot be trusted as security boundaries.
+
+    `headers` and `rows` cells are NFC-normalized. Rows have the same length
+    as `headers` (extractors pad short rows with `""` or drop-with-warning).
+    Cell length is bounded by `Limits`-derived caps (spec: 1024 chars); values
+    exceeding the cap are truncated and a warning is appended.
+    """
+
+    client_table_hint: str
+    title: str | None
+    headers: list[str]
+    rows: list[list[str]]
+    page: int | None = None
+    bbox: tuple[float, float, float, float] | None = None
+
+
+@dataclass(slots=True)
 class Content:
     text: str
     pages: list[Page] | None = None
     sections: list[Section] | None = None
     markdown: str | None = None
     sentences: list[Sentence] | None = None
+    tables: list[Table] | None = None
 
 
 @dataclass(slots=True)
@@ -156,6 +181,10 @@ class ExtractionResult:
             d["content"]["pages"] = None
         if not d["content"]["sections"]:
             d["content"]["sections"] = None
+        # tables: explicit null (matches spec.content.tables nullable) when
+        # the format has no structured-table support or none were detected.
+        if not d["content"].get("tables"):
+            d["content"]["tables"] = None
         return d
 
     @classmethod
@@ -182,6 +211,19 @@ class ExtractionResult:
                 markdown=data["content"].get("markdown"),
                 sentences=[Sentence(**s) for s in data["content"]["sentences"]]
                 if data["content"].get("sentences") is not None
+                else None,
+                tables=[
+                    Table(
+                        client_table_hint=t["client_table_hint"],
+                        title=t.get("title"),
+                        headers=list(t.get("headers") or []),
+                        rows=[list(r) for r in (t.get("rows") or [])],
+                        page=t.get("page"),
+                        bbox=tuple(t["bbox"]) if t.get("bbox") is not None else None,
+                    )
+                    for t in data["content"]["tables"]
+                ]
+                if data["content"].get("tables") is not None
                 else None,
             ),
             warnings=list(data.get("warnings") or []),
