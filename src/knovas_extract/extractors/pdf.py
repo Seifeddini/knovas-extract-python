@@ -159,7 +159,11 @@ def _parse_pdf_date(s: str | None) -> str | None:
             sign = rest[0]
             tzhour = rest[1:3]
             tzmin = rest[3:5] if len(rest) >= 5 else "00"
-            tz = f"{sign}{tzhour}:{tzmin}"
+            # Only emit a numeric offset when both fields are digits; otherwise
+            # fall back to Z rather than produce a malformed ISO string like
+            # "+ab:cd" that downstream date parsers would reject.
+            if tzhour.isdigit() and tzmin.isdigit():
+                tz = f"{sign}{tzhour}:{tzmin}"
         elif rest.startswith("Z"):
             tz = "Z"
     return f"{year:04d}-{month:02d}-{day:02d}T{hour:02d}:{minute:02d}:{second:02d}{tz}"
@@ -414,7 +418,7 @@ class PdfExtractor(IExtractor):
             # Per-page text. Caps text size in aggregate; raises if exceeded.
             pages: list[Page] = []
             text_chunks: list[str] = []
-            total_chars = 0
+            total_bytes = 0  # UTF-8 bytes, to match the byte-denominated cap
             had_js = False
             for i in range(page_count):
                 try:
@@ -427,10 +431,13 @@ class PdfExtractor(IExtractor):
                     warnings.append("first page produced no text (consider OCR for scanned PDFs)")
                 pages.append(Page(index=i, text=canonicalize_text(page_text)))
                 text_chunks.append(page_text)
-                total_chars += len(page_text)
-                if total_chars > limits.max_text_bytes:
+                # Count UTF-8 bytes, not characters: max_text_bytes is a byte
+                # cap, and a char count under-counts multibyte text by up to 4x,
+                # which would let the true byte size overrun the cap.
+                total_bytes += len(page_text.encode("utf-8"))
+                if total_bytes > limits.max_text_bytes:
                     raise ResourceExhaustedError(
-                        "text size", limits.max_text_bytes, observed=total_chars
+                        "text size", limits.max_text_bytes, observed=total_bytes
                     )
 
             # Doc-level JS check (cheap; runs once). Heuristic only; the
@@ -445,6 +452,15 @@ class PdfExtractor(IExtractor):
                 warnings.append("PDF embedded JavaScript ignored (never executed)")
 
             full_text = canonicalize_text("\n\n".join(text_chunks))
+
+            # Authoritative post-canonicalization byte cap. The per-page running
+            # total is a cheap early abort; canonicalization can shift the size,
+            # so re-check the final joined text (parity with docx/html/rtf/eml).
+            full_text_bytes = len(full_text.encode("utf-8"))
+            if full_text_bytes > limits.max_text_bytes:
+                raise ResourceExhaustedError(
+                    "text size", limits.max_text_bytes, observed=full_text_bytes
+                )
 
             # Attach 1-based line coordinates to each Page by locating each
             # page.text in full_text (they are identical after

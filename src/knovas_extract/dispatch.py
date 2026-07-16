@@ -91,11 +91,19 @@ def _read_input(input: InputT, limits: Limits) -> tuple[bytes, str | None, str |
     else:
         raw = os.fspath(input)
         path = Path(raw)
-        size = path.stat().st_size
-        if size > limits.max_input_bytes:
-            raise ResourceExhaustedError("input size", limits.max_input_bytes, observed=size)
+        # Cheap early-out for regular files whose stat size already blows the
+        # cap — avoids reading a known-oversized file. NOT authoritative:
+        # special files (FIFO, /proc, /dev/*) stat as size 0 yet can stream
+        # unbounded bytes, and a regular file can grow between stat and read
+        # (TOCTOU). The bounded read below is the real guard.
+        with contextlib.suppress(OSError):
+            size = path.stat().st_size
+            if size > limits.max_input_bytes:
+                raise ResourceExhaustedError("input size", limits.max_input_bytes, observed=size)
         with path.open("rb") as f:
-            data = f.read()
+            # Read at most one byte past the cap so we can detect (but never
+            # fully materialize) an oversized / unbounded source.
+            data = f.read(limits.max_input_bytes + 1)
         filename = path.name
         argv_path = raw
 

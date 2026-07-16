@@ -183,8 +183,16 @@ class ExtractionResult:
             d["content"]["sections"] = None
         # tables: explicit null (matches spec.content.tables nullable) when
         # the format has no structured-table support or none were detected.
-        if not d["content"].get("tables"):
+        tables = d["content"].get("tables")
+        if not tables:
             d["content"]["tables"] = None
+        else:
+            # asdict() reconstructs the bbox tuple AS a tuple; JSON (and
+            # jsonschema's "array" type check) require a list. Normalize so
+            # to_dict() output validates against spec/schema.json directly.
+            for t in tables:
+                if t.get("bbox") is not None:
+                    t["bbox"] = list(t["bbox"])
         return d
 
     @classmethod

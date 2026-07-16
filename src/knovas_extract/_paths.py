@@ -8,8 +8,9 @@ review comment.
 
 Rejected:
   - NUL bytes (truncate C strings downstream)
-  - ASCII control characters 0x00-0x1F (except tab) — includes CR/LF used
-    for log-injection and ANSI escapes (0x1B) used to hijack terminals
+  - Control characters: C0 0x00-0x1F (except tab) — includes CR/LF used for
+    log-injection and ESC (0x1B) used to hijack terminals — plus DEL (0x7F)
+    and C1 0x80-0x9F (0x9B is the 8-bit CSI, an ANSI-escape opener)
   - Unicode bidirectional-override / isolate characters (CVE-2021-42574
     "Trojan Source": U+202A..E, U+2066..9). These render a path as
     something different than its bytes actually contain — a common review
@@ -72,6 +73,17 @@ def validate_source_path(path: str | None, limits: Limits) -> str | None:
             "Source.path contains Unicode bidirectional-override character "
             "(CVE-2021-42574 Trojan Source)"
         )
-    if any(ord(c) < 0x20 and c != "\t" for c in path):
-        raise ValueError("Source.path contains ASCII control character")
+    if any(_is_control(c) for c in path):
+        raise ValueError("Source.path contains control character")
     return path
+
+
+def _is_control(c: str) -> bool:
+    """True for C0 (0x00-0x1F, except tab), DEL (0x7F), and C1 (0x80-0x9F).
+
+    C1 matters because 0x9B is the 8-bit CSI — a single byte that opens an
+    ANSI escape sequence on terminals that honor it, so it enables the same
+    terminal-hijack / log-injection class as the C0 ESC (0x1B).
+    """
+    o = ord(c)
+    return (o < 0x20 and c != "\t") or 0x7F <= o <= 0x9F

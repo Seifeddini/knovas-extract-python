@@ -53,6 +53,16 @@ def _guard_zip(data: bytes, limits: Limits) -> zipfile.ZipFile:
 
     Raises CorruptDocumentError on malformed/zip-slip and
     ResourceExhaustedError on bomb-like compression ratios.
+
+    The ratio / per-entry checks below read the central directory's DECLARED
+    sizes, and that is sufficient: CPython's `zipfile` treats `file_size` as
+    the authoritative uncompressed length — it never emits more than
+    `file_size` bytes for an entry and CRC-verifies at EOF. So a hand-forged
+    archive that UNDERSTATES `file_size` to sneak past these caps does not
+    then decompress unbounded; the reader (here, and inside python-docx /
+    mammoth) stops at the declared size and fails CRC -> BadZipFile. Honest
+    bombs declare their true (huge) sizes and are caught here before any XML
+    parser runs.
     """
     try:
         zf = zipfile.ZipFile(BytesIO(data), "r")
@@ -86,20 +96,35 @@ def _guard_zip(data: bytes, limits: Limits) -> zipfile.ZipFile:
     return zf
 
 
-# NOTE — XML security posture:
-#   - Our own core.xml parsing goes through `defusedxml.ElementTree` (see
-#     _extract_core_metadata below). That's the safe path.
-#   - python-docx uses **lxml** internally; defusedxml cannot intercept that.
-#     lxml's defaults disable external-entity fetching and network access but
-#     DO resolve internal entities, leaving a residual billion-laughs risk on
-#     hostile DOCX.
-#   - The real defense against XML bombs in hostile DOCX is the decompression-
-#     ratio cap + per-entry size cap in _guard_zip — a billion-laughs payload
-#     trips one of those before lxml ever sees the bytes.
-# We previously called defusedxml.defuse_stdlib() here as belt-and-suspenders.
-# Removed because: (a) we don't use stdlib XML directly, (b) it patches the
-# deprecated xml.etree.cElementTree which emits a DeprecationWarning under
-# Python 3.13 that we'd have to silence at every callsite.
+# NOTE — XML security posture (three parsers touch the DOCX zip):
+#   1. Our docProps/{core,app}.xml parsing → `defusedxml.ElementTree`
+#      (see _extract_*_metadata). Entities forbidden; the safe path. A
+#      hostile entity here raises defusedxml's EntitiesForbidden, which we
+#      re-frame as CorruptDocumentError.
+#   2. python-docx parses word/document.xml with **lxml**, using a parser
+#      configured `resolve_entities=False` (docx.oxml.parser). That disables
+#      BOTH internal-entity expansion (billion-laughs) and external-entity
+#      resolution (XXE): entity references are left unexpanded, not fetched;
+#      lxml also defaults to no_network=True. A billion-laughs payload trips
+#      libxml2's entity-amplification cap and surfaces here as
+#      CorruptDocumentError.
+#   3. mammoth parses word/document.xml with the stdlib **xml.dom.minidom**
+#      (expat). Expat does not fetch external entities by default (no XXE),
+#      and CPython >= 3.11 (our floor) bundles libexpat >= 2.4 whose
+#      billion-laughs amplification protection is on by default — an
+#      amplification bomb raises ExpatError, which _extract_html() catches
+#      (sections / markdown are skipped with a warning; python-docx has
+#      usually already rejected the document by then).
+#   The zip decompression-ratio + actual-size caps in _guard_zip bound the
+#   *bytes* each parser sees; the entity protections above bound *expansion*
+#   during parse — which the byte caps do NOT catch, since an entity bomb is
+#   tiny on disk. Both layers are required.
+# NB: this is NOT "all XML via defusedxml" — only the docProps path is.
+# We previously called defusedxml.defuse_stdlib() as belt-and-suspenders for
+# the minidom path. Removed because it patches the deprecated
+# xml.etree.cElementTree, emitting a DeprecationWarning that our
+# filterwarnings=error test config turns into a hard failure; the libexpat
+# amplification cap (guaranteed by our Python >= 3.11 floor) covers it.
 
 
 def _extract_body_text(data: bytes) -> str:

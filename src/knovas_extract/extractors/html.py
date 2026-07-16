@@ -21,8 +21,8 @@ Security posture (see SECURITY.md):
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
-import re
 from typing import Any, ClassVar
 
 from knovas_extract.dispatch import MIME_REGISTRY, make_result
@@ -32,9 +32,29 @@ from knovas_extract.interfaces import IExtractor
 from knovas_extract.normalize import canonicalize_text, word_count
 from knovas_extract.result import ExtractionResult, Limits, Metadata, Section
 
-_SCRIPT_STYLE = re.compile(r"<(script|style)\b[^>]*>.*?</\1>", re.IGNORECASE | re.DOTALL)
-
 _URL_SCHEME_ALLOWLIST = frozenset({"http", "https", "mailto", "tel"})
+
+# Tags whose text content must NOT surface in content.text.
+_TEXT_STRIP_TAGS = ("script", "style")
+
+
+def _strip_script_style(html_text: str) -> Any:
+    """Parse HTML and remove <script>/<style> nodes (with their contents).
+
+    Uses selectolax's DOM `decompose()` rather than a regex. A regex is
+    bypassable — e.g. `</script >` (trailing space) escapes a naive
+    `</script>` end-tag match, and an attribute value containing `>` breaks
+    an `[^>]*` open-tag match — which would leak raw script/style source
+    text into `content.text`. DOM removal is exact and deterministic.
+    """
+    from selectolax.parser import HTMLParser
+
+    tree = HTMLParser(html_text)
+    for tag in _TEXT_STRIP_TAGS:
+        for node in tree.css(tag):
+            with contextlib.suppress(Exception):
+                node.decompose()
+    return tree
 
 
 def _url_scheme_ok(url: str | None) -> bool:
@@ -445,14 +465,14 @@ class HtmlExtractor(IExtractor):
         except Exception as exc:
             raise CorruptDocumentError(f"HTML parse failed: {exc}") from exc
 
-        # Body text — drop scripts/styles before extracting visible text. We
-        # use the regex on the raw input rather than relying on selectolax's
-        # node walk because the regex stripping is deterministic and the test
-        # corpus expects it.
-        cleaned = _SCRIPT_STYLE.sub("", raw_text)
-        body_tree = HTMLParser(cleaned)
+        # Body text — drop <script>/<style> (with contents) via the DOM before
+        # extracting visible text. DOM removal is exact where a regex is
+        # bypassable (`</script >` etc.), and deterministic for golden tests.
+        body_tree = _strip_script_style(raw_text)
         body = body_tree.body.text(separator="\n") if body_tree.body else ""
         text = canonicalize_text(body)
+        # Script/style-free HTML for the section slicer (it re-parses a string).
+        cleaned = body_tree.html or raw_text
 
         if len(text.encode("utf-8")) > limits.max_text_bytes:
             raise ResourceExhaustedError("text size", limits.max_text_bytes, observed=len(text))
