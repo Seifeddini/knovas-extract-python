@@ -58,7 +58,7 @@ md   = ["python-frontmatter >= 1.1.0"]
 # Markdown emission (opt-in `extract(..., emit_markdown=True)`). Enables
 # sanitized HTML→Markdown conversion in the html/docx/eml/msg paths.
 # See SECURITY.md → "Markdown emission" for the sanitizer contract.
-markdown = ["markdownify >= 0.13.1,<1.0"]
+markdown = ["markdownify >= 0.13.1,< 2.0"]
 
 # Sentence tokenization (opt-in `extract(..., emit_sentences=True)`). pysbd
 # is pure-Python (MIT), 22 languages, no model download. See
