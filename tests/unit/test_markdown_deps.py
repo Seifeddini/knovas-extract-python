@@ -48,6 +48,10 @@ def hide_module(monkeypatch: pytest.MonkeyPatch) -> Iterator[callable]:  # type:
 
 @pytest.mark.unit
 def test_missing_markdownify_raises_dependency_missing(hide_module) -> None:  # type: ignore[no-untyped-def]
+    # Needs selectolax present so the HTML text path succeeds and the flow
+    # reaches the markdownify import; skip when the `html` extra is absent
+    # (the sibling test below covers the selectolax-missing case).
+    pytest.importorskip("selectolax")
     hide_module("markdownify")
     with pytest.raises(DependencyMissingError) as excinfo:
         extract(

@@ -37,6 +37,9 @@ def test_default_is_no_markdown_for_txt() -> None:
 
 @pytest.mark.unit
 def test_default_is_no_markdown_for_html() -> None:
+    # HTML extraction requires the `html` extra (selectolax); skip when it is
+    # not installed, matching the guard in test_extractors_html.py.
+    pytest.importorskip("selectolax")
     r = extract(b"<html><body><p>hi</p></body></html>", mime="text/html")
     assert r.content.markdown is None
 

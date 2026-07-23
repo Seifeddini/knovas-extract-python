@@ -55,7 +55,9 @@ def test_docx_table_appears_in_content_tables() -> None:
             ["Bosch", "12346", "1200.00"],
         ],
     )
-    r = extract(data, mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+    r = extract(
+        data, mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    )
     assert r.content.tables is not None
     assert len(r.content.tables) == 1
     t = r.content.tables[0]
@@ -78,7 +80,9 @@ def test_docx_table_no_longer_appears_in_body_text() -> None:
             ["UniqueVendorNameForAssertion", "12345", "500.00"],
         ],
     )
-    r = extract(data, mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+    r = extract(
+        data, mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    )
     # Body prose must still be present.
     assert "prose before the table" in r.content.text
     assert "prose after the table" in r.content.text

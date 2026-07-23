@@ -39,7 +39,7 @@ from knovas_extract.normalize import canonicalize_text, word_count
 from knovas_extract.result import ExtractionResult, Limits, Metadata, Section
 
 if TYPE_CHECKING:
-    pass
+    from ..result import Table
 
 DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 
@@ -155,7 +155,7 @@ def _extract_body_text(data: bytes) -> str:
 _TABLE_CELL_MAX_CHARS = 1024
 
 
-def _extract_structured_tables(data: bytes) -> tuple[list, list[str]]:
+def _extract_structured_tables(data: bytes) -> tuple[list[Table], list[str]]:
     """Extract structured tables from a DOCX blob (spec 1.1.0+).
 
     Returns (tables, warnings) where `tables` is a list of `Table` dataclass
@@ -163,25 +163,23 @@ def _extract_structured_tables(data: bytes) -> tuple[list, list[str]]:
     holds any truncation / shape notes for the caller to append to the
     result's warnings.
     """
-    from ..result import Table
-
     import docx  # python-docx
+
+    from ..result import Table
 
     try:
         document = docx.Document(BytesIO(data))
     except Exception as exc:
         raise CorruptDocumentError(f"python-docx could not parse: {exc}") from exc
 
-    tables: list = []
+    tables: list[Table] = []
     warnings: list[str] = []
     for t_idx, table in enumerate(document.tables):
         rows_raw = list(table.rows)
         if not rows_raw:
             continue
         header_cells = [(c.text or "").strip() for c in rows_raw[0].cells]
-        headers = [
-            _cap_cell(h, warnings, t_idx, "header", i) for i, h in enumerate(header_cells)
-        ]
+        headers = [_cap_cell(h, warnings, t_idx, "header", i) for i, h in enumerate(header_cells)]
         if not headers:
             continue
         n_cols = len(headers)
@@ -205,8 +203,7 @@ def _extract_structured_tables(data: bytes) -> tuple[list, list[str]]:
                     f"{len(row.cells)} to {n_cols} cells"
                 )
             capped = [
-                _cap_cell(c, warnings, t_idx, "row", r_idx - 1, col=i)
-                for i, c in enumerate(cells)
+                _cap_cell(c, warnings, t_idx, "row", r_idx - 1, col=i) for i, c in enumerate(cells)
             ]
             rows.append(capped)
         if not rows:
@@ -224,7 +221,9 @@ def _extract_structured_tables(data: bytes) -> tuple[list, list[str]]:
     return tables, warnings
 
 
-def _cap_cell(value: str, warnings: list[str], t_idx: int, kind: str, r_idx: int, col: int = -1) -> str:
+def _cap_cell(
+    value: str, warnings: list[str], t_idx: int, kind: str, r_idx: int, col: int = -1
+) -> str:
     if len(value) <= _TABLE_CELL_MAX_CHARS:
         return value
     where = f"tables[{t_idx}].{kind}" + (f"[{r_idx}].[{col}]" if col >= 0 else f"[{r_idx}]")

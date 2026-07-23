@@ -83,12 +83,14 @@ def test_pdf_with_no_tables_emits_none() -> None:
 
 @pytest.mark.unit
 def test_pdf_with_simple_table_emits_structured_data() -> None:
-    data = _pdf_with_table([
-        ["Vendor", "Invoice", "Amount"],
-        ["Acme", "12345", "500.00"],
-        ["Bosch", "12346", "1200.00"],
-        ["Contoso", "12347", "300.00"],
-    ])
+    data = _pdf_with_table(
+        [
+            ["Vendor", "Invoice", "Amount"],
+            ["Acme", "12345", "500.00"],
+            ["Bosch", "12346", "1200.00"],
+            ["Contoso", "12347", "300.00"],
+        ]
+    )
     r = extract(data, mime="application/pdf")
     tables = r.content.tables
     if not tables:
@@ -108,11 +110,13 @@ def test_pdf_with_simple_table_emits_structured_data() -> None:
 
 @pytest.mark.unit
 def test_pdf_bbox_populated_when_detector_returns_it() -> None:
-    data = _pdf_with_table([
-        ["a", "b"],
-        ["1", "2"],
-        ["3", "4"],
-    ])
+    data = _pdf_with_table(
+        [
+            ["a", "b"],
+            ["1", "2"],
+            ["3", "4"],
+        ]
+    )
     r = extract(data, mime="application/pdf")
     if not r.content.tables:
         pytest.skip("PyMuPDF find_tables did not detect the synthetic grid table")
@@ -175,12 +179,11 @@ def test_pdf_table_extraction_never_leaks_cell_via_exception(monkeypatch) -> Non
         # exactly the failure mode we defend against.
         class _CellLeak(Exception):
             pass
+
         try:
             raise _CellLeak("VENDOR: Acme; AMOUNT: 500.00")
         except Exception as exc:
-            warnings.append(
-                f"pdf: table detection failed on page 1 ({type(exc).__name__})"
-            )
+            warnings.append(f"pdf: table detection failed on page 1 ({type(exc).__name__})")
         return []
 
     monkeypatch.setattr(

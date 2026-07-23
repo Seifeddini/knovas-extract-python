@@ -30,7 +30,7 @@ from knovas_extract.errors import CorruptDocumentError, ResourceExhaustedError
 from knovas_extract.extractors.txt import _decode
 from knovas_extract.interfaces import IExtractor
 from knovas_extract.normalize import canonicalize_text, word_count
-from knovas_extract.result import ExtractionResult, Limits, Metadata, Section
+from knovas_extract.result import ExtractionResult, Limits, Metadata, Section, Table
 
 _URL_SCHEME_ALLOWLIST = frozenset({"http", "https", "mailto", "tel"})
 
@@ -200,7 +200,7 @@ _HTML_TABLE_MAX_COLS = 64
 _HTML_TABLES_MAX_PER_DOC = 50
 
 
-def _extract_html_structured_tables(tree, warnings: list[str]):
+def _extract_html_structured_tables(tree: Any, warnings: list[str]) -> list[Table]:
     """Walk `<table>` elements; emit `Table` dataclass instances.
 
     Preference for `<thead>`/`<tbody>` when present; falls back to using the
@@ -208,9 +208,7 @@ def _extract_html_structured_tables(tree, warnings: list[str]):
     are extremely rare in business documents and would explode the flat
     tables[] array in ways downstream consumers don't expect.
     """
-    from ..result import Table
-
-    tables: list = []
+    tables: list[Table] = []
     seen_ids: set[int] = set()
     for dom_idx, table_node in enumerate(tree.css("table")):
         if len(tables) >= _HTML_TABLES_MAX_PER_DOC:
@@ -260,11 +258,11 @@ def _extract_html_structured_tables(tree, warnings: list[str]):
             if thead is not None:
                 thead_trs = thead.css("tr")
                 thead_signatures = {
-                    tuple(_html_cell_text(c) for c in tr.css("th, td"))
-                    for tr in thead_trs
+                    tuple(_html_cell_text(c) for c in tr.css("th, td")) for tr in thead_trs
                 }
                 candidate_trs = [
-                    tr for tr in all_trs
+                    tr
+                    for tr in all_trs
                     if tuple(_html_cell_text(c) for c in tr.css("th, td")) not in thead_signatures
                 ]
             else:
@@ -331,7 +329,7 @@ def _extract_html_structured_tables(tree, warnings: list[str]):
     return tables
 
 
-def _html_cell_text(cell) -> str:
+def _html_cell_text(cell: Any) -> str:
     try:
         raw = cell.text(separator=" ", strip=True) or ""
     except Exception:
@@ -344,7 +342,8 @@ def _cap_html_cell(value: str, warnings: list[str], t_idx: int, r_idx: int, c_id
     if len(value) <= _HTML_TABLE_CELL_MAX_CHARS:
         return value
     where = (
-        f"tables[{t_idx}].headers[{c_idx}]" if r_idx < 0
+        f"tables[{t_idx}].headers[{c_idx}]"
+        if r_idx < 0
         else f"tables[{t_idx}].rows[{r_idx}].[{c_idx}]"
     )
     warnings.append(f"html: {where} truncated at {_HTML_TABLE_CELL_MAX_CHARS} chars")

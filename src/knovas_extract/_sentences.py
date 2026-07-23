@@ -25,7 +25,7 @@ Security posture:
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from knovas_extract.errors import DependencyMissingError, ResourceExhaustedError
 from knovas_extract.result import Sentence
@@ -109,7 +109,10 @@ def split_sentences(
 
     lang = _resolve_language(language)
     seg = pysbd.Segmenter(language=lang, clean=False)
-    raw_segments: list[str] = seg.segment(text)
+    # pysbd has no type stubs; segment() returns list[str] at runtime with
+    # clean=False. cast keeps pyright's second-opinion pass green (mypy treats
+    # pysbd as Any via [[tool.mypy.overrides]]).
+    raw_segments: list[str] = cast("list[str]", seg.segment(text))
 
     result: list[Sentence] = []
     cursor = 0

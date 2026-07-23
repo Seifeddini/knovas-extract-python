@@ -253,6 +253,7 @@ module = [
   "selectolax.*",
   "striprtf.*",
   "fitz", "fitz.*",
+  "pymupdf4llm", "pymupdf4llm.*",
   "extract_msg.*",
   "chardet", "chardet.*",
   "frontmatter", "frontmatter.*",

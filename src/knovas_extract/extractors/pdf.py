@@ -27,7 +27,7 @@ from __future__ import annotations
 
 import contextlib
 import hashlib
-from typing import TYPE_CHECKING, ClassVar, cast
+from typing import TYPE_CHECKING, Any, ClassVar, cast
 
 from knovas_extract.dispatch import MIME_REGISTRY, make_result
 from knovas_extract.errors import (
@@ -91,11 +91,11 @@ def _parse_xmp(xmp: str, limits: Limits, warnings: list[str]) -> dict[str, str]:
         # dc: / xmp: fields are usually wrapped in rdf:Alt / rdf:Seq / rdf:li.
         for el in root.iter(f"{{{ns[prefix]}}}{tag}"):
             if el.text and el.text.strip():
-                return el.text.strip()
+                return cast(str, el.text.strip())
             # Nested rdf:li.
             for child in el.iter(f"{{{ns['rdf']}}}li"):
                 if child.text and child.text.strip():
-                    return child.text.strip()
+                    return cast(str, child.text.strip())
         return None
 
     def _attr_deep(tag: str, prefix: str, attr_prefix: str, attr: str) -> str | None:
@@ -125,6 +125,8 @@ def _parse_xmp(xmp: str, limits: Limits, warnings: list[str]) -> dict[str, str]:
 
 if TYPE_CHECKING:
     import fitz
+
+    from ..result import Table
 
 
 def _parse_pdf_date(s: str | None) -> str | None:
@@ -188,7 +190,9 @@ def _pdf_to_markdown(
     from knovas_extract._markdown import apply_url_allowlist, check_expansion
 
     try:
-        raw_md = pymupdf4llm.to_markdown(doc)
+        # to_markdown() returns str by default (page_chunks=False); the union
+        # return type (str | list[dict]) only applies with page_chunks=True.
+        raw_md = cast(str, pymupdf4llm.to_markdown(doc))
     except Exception:
         warnings.append("pdf: pymupdf4llm conversion failed; content.markdown left null")
         return None
@@ -213,7 +217,9 @@ _TABLE_MAX_COLS = 64
 _TABLES_MAX_PER_DOC = 50
 
 
-def _cap_pdf_cell(v, warnings: list[str], t_idx: int, page_1based: int, row_hint: str) -> str:
+def _cap_pdf_cell(
+    v: object, warnings: list[str], t_idx: int, page_1based: int, row_hint: str
+) -> str:
     if v is None:
         return ""
     s = str(v).strip()
@@ -225,7 +231,7 @@ def _cap_pdf_cell(v, warnings: list[str], t_idx: int, page_1based: int, row_hint
     return s[:_TABLE_CELL_MAX_CHARS]
 
 
-def _extract_structured_tables_from_pdf(doc, warnings: list[str]):
+def _extract_structured_tables_from_pdf(doc: Any, warnings: list[str]) -> list[Table]:
     """Iterate pages, call PyMuPDF.find_tables(), materialize as `Table` list.
 
     Failures during table detection on a single page are demoted to warnings —
@@ -234,7 +240,7 @@ def _extract_structured_tables_from_pdf(doc, warnings: list[str]):
     """
     from ..result import Table
 
-    tables: list = []
+    tables: list[Table] = []
     t_idx = 0
 
     for page_index in range(doc.page_count):
@@ -246,7 +252,9 @@ def _extract_structured_tables_from_pdf(doc, warnings: list[str]):
         try:
             page = doc.load_page(page_index)
         except Exception as exc:
-            warnings.append(f"pdf: page {page_index} could not load for table scan ({type(exc).__name__})")
+            warnings.append(
+                f"pdf: page {page_index} could not load for table scan ({type(exc).__name__})"
+            )
             continue
         try:
             finder = page.find_tables()
@@ -296,8 +304,13 @@ def _extract_structured_tables_from_pdf(doc, warnings: list[str]):
                 data_rows = raw_rows[1:]
 
             headers = [
-                _cap_pdf_cell(h if h is not None else f"col_{i}",
-                              warnings, t_idx, page_index + 1, f"header[{i}]")
+                _cap_pdf_cell(
+                    h if h is not None else f"col_{i}",
+                    warnings,
+                    t_idx,
+                    page_index + 1,
+                    f"header[{i}]",
+                )
                 for i, h in enumerate(hdr_names)
             ]
             headers = [h if h else f"col_{i}" for i, h in enumerate(headers)]
@@ -339,8 +352,12 @@ def _extract_structured_tables_from_pdf(doc, warnings: list[str]):
             try:
                 raw_bbox = getattr(tbl, "bbox", None)
                 if raw_bbox is not None and len(raw_bbox) == 4:
-                    bbox = (float(raw_bbox[0]), float(raw_bbox[1]),
-                            float(raw_bbox[2]), float(raw_bbox[3]))
+                    bbox = (
+                        float(raw_bbox[0]),
+                        float(raw_bbox[1]),
+                        float(raw_bbox[2]),
+                        float(raw_bbox[3]),
+                    )
             except Exception:
                 bbox = None
 

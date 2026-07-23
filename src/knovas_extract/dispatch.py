@@ -39,6 +39,7 @@ from knovas_extract.result import (
     Section,
     Sentence,
     Source,
+    Table,
 )
 
 # --- MIME registry ---------------------------------------------------------
@@ -435,7 +436,7 @@ def make_result(
     warnings: list[str] | None = None,
     markdown: str | None = None,
     sentences: list[Sentence] | None = None,
-    tables=None,
+    tables: list[Table] | None = None,
 ) -> ExtractionResult:
     return ExtractionResult(
         spec_version=_SPEC_VERSION,
