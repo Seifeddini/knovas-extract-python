@@ -7,5 +7,5 @@ circular import via dispatch.py's lazy registry).
 
 from __future__ import annotations
 
-__version__ = "0.1.3"
-SPEC_VERSION = "1.2.0"
+__version__ = "0.2.0"
+SPEC_VERSION = "1.3.0"

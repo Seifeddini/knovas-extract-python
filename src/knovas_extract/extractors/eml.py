@@ -12,8 +12,11 @@ Security posture (see SECURITY.md):
   text/html, we prefer text/plain (per RFC 2046). If only HTML is present, we
   strip tags with a deliberately-tiny regex — no external HTML parser to feed
   hostile markup.
-- **Attachment payloads**: NEVER read into memory beyond their metadata. We
-  surface name + content_type + size under `metadata.extra.eml:attachments`.
+- **Attachment payloads**: never retained in the result — only name,
+  content_type, and size are surfaced under `metadata.extra`. Measuring the
+  decoded size does transiently decode the part, but the decoded bytes are
+  counted and discarded, never stored; this is bounded by `max_input_bytes`
+  because the whole message is already resident from `message_from_bytes`.
 """
 
 from __future__ import annotations
@@ -102,8 +105,9 @@ def _collect_attachments(msg: EmailMessage) -> list[dict[str, str | int | None]]
     if not msg.is_multipart():
         return out
     for part in msg.iter_attachments():
-        # Best-effort metadata only — we never read attachment payload bytes
-        # into the result; per-attachment parser failures are non-fatal.
+        # Best-effort metadata only. `size` requires decoding the part to
+        # measure it; the decoded bytes are counted and immediately discarded
+        # — never stored in the result. Per-attachment failures are non-fatal.
         name = ctype = None
         size: int | None = None
         with contextlib.suppress(Exception):

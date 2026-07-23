@@ -53,6 +53,16 @@ def _guard_zip(data: bytes, limits: Limits) -> zipfile.ZipFile:
 
     Raises CorruptDocumentError on malformed/zip-slip and
     ResourceExhaustedError on bomb-like compression ratios.
+
+    The ratio / per-entry checks below read the central directory's DECLARED
+    sizes, and that is sufficient: CPython's `zipfile` treats `file_size` as
+    the authoritative uncompressed length — it never emits more than
+    `file_size` bytes for an entry and CRC-verifies at EOF. So a hand-forged
+    archive that UNDERSTATES `file_size` to sneak past these caps does not
+    then decompress unbounded; the reader (here, and inside python-docx /
+    mammoth) stops at the declared size and fails CRC -> BadZipFile. Honest
+    bombs declare their true (huge) sizes and are caught here before any XML
+    parser runs.
     """
     try:
         zf = zipfile.ZipFile(BytesIO(data), "r")
@@ -86,24 +96,47 @@ def _guard_zip(data: bytes, limits: Limits) -> zipfile.ZipFile:
     return zf
 
 
-# NOTE — XML security posture:
-#   - Our own core.xml parsing goes through `defusedxml.ElementTree` (see
-#     _extract_core_metadata below). That's the safe path.
-#   - python-docx uses **lxml** internally; defusedxml cannot intercept that.
-#     lxml's defaults disable external-entity fetching and network access but
-#     DO resolve internal entities, leaving a residual billion-laughs risk on
-#     hostile DOCX.
-#   - The real defense against XML bombs in hostile DOCX is the decompression-
-#     ratio cap + per-entry size cap in _guard_zip — a billion-laughs payload
-#     trips one of those before lxml ever sees the bytes.
-# We previously called defusedxml.defuse_stdlib() here as belt-and-suspenders.
-# Removed because: (a) we don't use stdlib XML directly, (b) it patches the
-# deprecated xml.etree.cElementTree which emits a DeprecationWarning under
-# Python 3.13 that we'd have to silence at every callsite.
+# NOTE — XML security posture (three parsers touch the DOCX zip):
+#   1. Our docProps/{core,app}.xml parsing → `defusedxml.ElementTree`
+#      (see _extract_*_metadata). Entities forbidden; the safe path. A
+#      hostile entity here raises defusedxml's EntitiesForbidden, which we
+#      re-frame as CorruptDocumentError.
+#   2. python-docx parses word/document.xml with **lxml**, using a parser
+#      configured `resolve_entities=False` (docx.oxml.parser). That disables
+#      BOTH internal-entity expansion (billion-laughs) and external-entity
+#      resolution (XXE): entity references are left unexpanded, not fetched;
+#      lxml also defaults to no_network=True. A billion-laughs payload trips
+#      libxml2's entity-amplification cap and surfaces here as
+#      CorruptDocumentError.
+#   3. mammoth parses word/document.xml with the stdlib **xml.dom.minidom**
+#      (expat). Expat does not fetch external entities by default (no XXE),
+#      and CPython >= 3.11 (our floor) bundles libexpat >= 2.4 whose
+#      billion-laughs amplification protection is on by default — an
+#      amplification bomb raises ExpatError, which _extract_html() catches
+#      (sections / markdown are skipped with a warning; python-docx has
+#      usually already rejected the document by then).
+#   The zip decompression-ratio + actual-size caps in _guard_zip bound the
+#   *bytes* each parser sees; the entity protections above bound *expansion*
+#   during parse — which the byte caps do NOT catch, since an entity bomb is
+#   tiny on disk. Both layers are required.
+# NB: this is NOT "all XML via defusedxml" — only the docProps path is.
+# We previously called defusedxml.defuse_stdlib() as belt-and-suspenders for
+# the minidom path. Removed because it patches the deprecated
+# xml.etree.cElementTree, emitting a DeprecationWarning that our
+# filterwarnings=error test config turns into a hard failure; the libexpat
+# amplification cap (guaranteed by our Python >= 3.11 floor) covers it.
 
 
 def _extract_body_text(data: bytes) -> str:
-    """Body text via python-docx. Takes original docx bytes (not a ZipFile)."""
+    """Body text via python-docx. Takes original docx bytes (not a ZipFile).
+
+    Since spec 1.1.0 (this repo v0.2.0+), tables are extracted STRUCTURALLY
+    into `content.tables[]` by `_extract_structured_tables`; they are NOT
+    duplicated into `content.text` here. This is a behavior change from
+    v0.1.x — table content used to appear as pipe-joined lines in the body
+    text; downstream servers now receive the raw structure and can decide
+    how to serialize it into embedding chunks. See docs/schema-fields.md#tables.
+    """
     import docx  # python-docx
 
     try:
@@ -116,12 +149,87 @@ def _extract_body_text(data: bytes) -> str:
         text = (para.text or "").rstrip()
         if text:
             parts.append(text)
-    for table in document.tables:
-        for row in table.rows:
-            row_text = " | ".join(cell.text.strip() for cell in row.cells if cell.text)
-            if row_text:
-                parts.append(row_text)
     return "\n\n".join(parts)
+
+
+_TABLE_CELL_MAX_CHARS = 1024
+
+
+def _extract_structured_tables(data: bytes) -> tuple[list, list[str]]:
+    """Extract structured tables from a DOCX blob (spec 1.1.0+).
+
+    Returns (tables, warnings) where `tables` is a list of `Table` dataclass
+    instances (imported lazily to avoid a circular import) and `warnings`
+    holds any truncation / shape notes for the caller to append to the
+    result's warnings.
+    """
+    from ..result import Table
+
+    import docx  # python-docx
+
+    try:
+        document = docx.Document(BytesIO(data))
+    except Exception as exc:
+        raise CorruptDocumentError(f"python-docx could not parse: {exc}") from exc
+
+    tables: list = []
+    warnings: list[str] = []
+    for t_idx, table in enumerate(document.tables):
+        rows_raw = list(table.rows)
+        if not rows_raw:
+            continue
+        header_cells = [(c.text or "").strip() for c in rows_raw[0].cells]
+        headers = [
+            _cap_cell(h, warnings, t_idx, "header", i) for i, h in enumerate(header_cells)
+        ]
+        if not headers:
+            continue
+        n_cols = len(headers)
+        rows: list[list[str]] = []
+        for r_idx, row in enumerate(rows_raw[1:], start=1):
+            cells = [(c.text or "").strip() for c in row.cells]
+            # Pad or trim to the header row's length so `rows[i]` shape stays
+            # invariant with `headers`. Spec-side row-length equality is
+            # enforced by the Knovas server (which rejects mismatches with a
+            # 400) — this client-side padding preserves what CAN be extracted.
+            if len(cells) < n_cols:
+                cells = cells + [""] * (n_cols - len(cells))
+                warnings.append(
+                    f"docx: tables[{t_idx}].rows[{r_idx - 1}] padded from "
+                    f"{len(row.cells)} to {n_cols} cells"
+                )
+            elif len(cells) > n_cols:
+                cells = cells[:n_cols]
+                warnings.append(
+                    f"docx: tables[{t_idx}].rows[{r_idx - 1}] truncated from "
+                    f"{len(row.cells)} to {n_cols} cells"
+                )
+            capped = [
+                _cap_cell(c, warnings, t_idx, "row", r_idx - 1, col=i)
+                for i, c in enumerate(cells)
+            ]
+            rows.append(capped)
+        if not rows:
+            continue
+        tables.append(
+            Table(
+                client_table_hint=f"docx_t{t_idx}",
+                title=None,
+                headers=headers,
+                rows=rows,
+                page=None,
+                bbox=None,
+            )
+        )
+    return tables, warnings
+
+
+def _cap_cell(value: str, warnings: list[str], t_idx: int, kind: str, r_idx: int, col: int = -1) -> str:
+    if len(value) <= _TABLE_CELL_MAX_CHARS:
+        return value
+    where = f"tables[{t_idx}].{kind}" + (f"[{r_idx}].[{col}]" if col >= 0 else f"[{r_idx}]")
+    warnings.append(f"docx: {where} truncated at {_TABLE_CELL_MAX_CHARS} chars")
+    return value[:_TABLE_CELL_MAX_CHARS]
 
 
 def _extract_html(data: bytes) -> str | None:
@@ -323,6 +431,17 @@ class DocxExtractor(IExtractor):
             body = _extract_body_text(data)
             text = canonicalize_text(body)
 
+            # Structured tables (spec 1.1.0+) — extracted separately from body
+            # text so downstream servers can decide serialization strategy.
+            try:
+                tables, table_warnings = _extract_structured_tables(data)
+                warnings.extend(table_warnings)
+            except CorruptDocumentError:
+                raise
+            except Exception as exc:  # never let a table failure kill the extraction
+                tables = None
+                warnings.append(f"docx: table extraction failed: {type(exc).__name__}")
+
             if len(text.encode("utf-8")) > limits.max_text_bytes:
                 raise ResourceExhaustedError("text size", limits.max_text_bytes, observed=len(text))
 
@@ -409,6 +528,7 @@ class DocxExtractor(IExtractor):
             warnings=warnings,
             markdown=markdown,
             sentences=sentences,
+            tables=tables or None,
         )
 
 

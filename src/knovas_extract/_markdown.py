@@ -442,6 +442,16 @@ def apply_url_allowlist(md: str, *, warnings: list[str]) -> str:
     Handles nested `(` inside the URL by depth-counting — hostile URLs
     like `javascript:alert(1)` are consumed as a single unit rather than
     truncated at the first inner `)`.
+
+    Scope: this pass matches only inline `[text](url)` / `![alt](url)` syntax.
+    Angle-bracket autolinks (`<javascript:...>`) and reference-style links
+    (`[text][id]` + a separate `[id]: url` definition) are intentionally NOT
+    rewritten — matching them generically would corrupt legitimate content
+    (a bare `<http://…>` autolink, `<` in code spans) for no real gain: the
+    only markdown producers we feed here (`markdownify` over a DOM-sanitized
+    tree, and `pymupdf4llm`) emit neither form. For HTML-shaped inputs the
+    authoritative defense is the DOM URL-allowlist in `_sanitize_dom`; this
+    function is the defence-in-depth pass for direct-markdown backends.
     """
     if not md:
         return md

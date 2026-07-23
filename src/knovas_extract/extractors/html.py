@@ -21,8 +21,8 @@ Security posture (see SECURITY.md):
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
-import re
 from typing import Any, ClassVar
 
 from knovas_extract.dispatch import MIME_REGISTRY, make_result
@@ -32,9 +32,29 @@ from knovas_extract.interfaces import IExtractor
 from knovas_extract.normalize import canonicalize_text, word_count
 from knovas_extract.result import ExtractionResult, Limits, Metadata, Section
 
-_SCRIPT_STYLE = re.compile(r"<(script|style)\b[^>]*>.*?</\1>", re.IGNORECASE | re.DOTALL)
-
 _URL_SCHEME_ALLOWLIST = frozenset({"http", "https", "mailto", "tel"})
+
+# Tags whose text content must NOT surface in content.text.
+_TEXT_STRIP_TAGS = ("script", "style")
+
+
+def _strip_script_style(html_text: str) -> Any:
+    """Parse HTML and remove <script>/<style> nodes (with their contents).
+
+    Uses selectolax's DOM `decompose()` rather than a regex. A regex is
+    bypassable — e.g. `</script >` (trailing space) escapes a naive
+    `</script>` end-tag match, and an attribute value containing `>` breaks
+    an `[^>]*` open-tag match — which would leak raw script/style source
+    text into `content.text`. DOM removal is exact and deterministic.
+    """
+    from selectolax.parser import HTMLParser
+
+    tree = HTMLParser(html_text)
+    for tag in _TEXT_STRIP_TAGS:
+        for node in tree.css(tag):
+            with contextlib.suppress(Exception):
+                node.decompose()
+    return tree
 
 
 def _url_scheme_ok(url: str | None) -> bool:
@@ -172,6 +192,165 @@ def _extract_html_metadata(tree: Any) -> dict[str, str | None]:
     return meta
 
 
+# ---------- structured tables (spec 1.1.0+) ----------
+
+_HTML_TABLE_CELL_MAX_CHARS = 1024
+_HTML_TABLE_MAX_ROWS = 5000
+_HTML_TABLE_MAX_COLS = 64
+_HTML_TABLES_MAX_PER_DOC = 50
+
+
+def _extract_html_structured_tables(tree, warnings: list[str]):
+    """Walk `<table>` elements; emit `Table` dataclass instances.
+
+    Preference for `<thead>`/`<tbody>` when present; falls back to using the
+    first `<tr>` as headers. Nested tables are skipped intentionally — they
+    are extremely rare in business documents and would explode the flat
+    tables[] array in ways downstream consumers don't expect.
+    """
+    from ..result import Table
+
+    tables: list = []
+    seen_ids: set[int] = set()
+    for dom_idx, table_node in enumerate(tree.css("table")):
+        if len(tables) >= _HTML_TABLES_MAX_PER_DOC:
+            warnings.append(
+                f"html: table extraction stopped at {_HTML_TABLES_MAX_PER_DOC} tables (spec cap)"
+            )
+            break
+        # Skip nested tables — take only top-level tables.
+        node_id = id(table_node)
+        if node_id in seen_ids:
+            continue
+        for nested in table_node.css("table"):
+            seen_ids.add(id(nested))
+
+        headers: list[str] = []
+        rows: list[list[str]] = []
+        header_tr_ids: set[int] = set()
+
+        thead = None
+        try:
+            thead = table_node.css_first("thead")
+        except Exception:
+            thead = None
+        tbody = None
+        try:
+            tbody = table_node.css_first("tbody")
+        except Exception:
+            tbody = None
+
+        # Headers.
+        if thead is not None:
+            for th_row in thead.css("tr"):
+                header_tr_ids.add(id(th_row))
+                cells = th_row.css("th, td")
+                if cells and not headers:
+                    headers = [_html_cell_text(c) for c in cells]
+
+        # Row source. When <tbody> is present, iterate only its rows; otherwise
+        # iterate rows in the table but exclude any that live under a <thead>.
+        # selectolax `id()` does not survive across CSS queries, so we compare
+        # by cell-text signature against headers we already captured.
+        header_signature = tuple(headers) if headers else None
+        if tbody is not None:
+            candidate_trs = tbody.css("tr")
+        else:
+            all_trs = table_node.css("tr")
+            if thead is not None:
+                thead_trs = thead.css("tr")
+                thead_signatures = {
+                    tuple(_html_cell_text(c) for c in tr.css("th, td"))
+                    for tr in thead_trs
+                }
+                candidate_trs = [
+                    tr for tr in all_trs
+                    if tuple(_html_cell_text(c) for c in tr.css("th, td")) not in thead_signatures
+                ]
+            else:
+                candidate_trs = all_trs
+
+        for tr in candidate_trs:
+            th_cells = tr.css("th")
+            td_cells = tr.css("td")
+            if not headers and th_cells and not td_cells:
+                headers = [_html_cell_text(c) for c in th_cells]
+                header_signature = tuple(headers)
+                continue
+            cells = tr.css("th, td")
+            if not cells:
+                continue
+            row_vals = [_html_cell_text(c) for c in cells]
+            if header_signature is not None and tuple(row_vals) == header_signature:
+                continue  # duplicate header row picked up by fallback iteration
+            rows.append(row_vals)
+
+        # If still no headers, use the first data row.
+        if not headers and rows:
+            headers = rows.pop(0)
+
+        # Skip pathological empty tables.
+        if not headers or not rows:
+            continue
+
+        # Apply spec caps.
+        if len(headers) > _HTML_TABLE_MAX_COLS:
+            warnings.append(
+                f"html: tables[{len(tables)}] column count {len(headers)} exceeds spec cap {_HTML_TABLE_MAX_COLS} — truncated"
+            )
+            headers = headers[:_HTML_TABLE_MAX_COLS]
+        n_cols = len(headers)
+
+        rows_norm: list[list[str]] = []
+        for r_idx, row in enumerate(rows):
+            if len(rows_norm) >= _HTML_TABLE_MAX_ROWS:
+                warnings.append(
+                    f"html: tables[{len(tables)}] row count exceeded spec cap {_HTML_TABLE_MAX_ROWS} — truncated"
+                )
+                break
+            if len(row) < n_cols:
+                row = row + [""] * (n_cols - len(row))
+            elif len(row) > n_cols:
+                row = row[:n_cols]
+            row = [_cap_html_cell(c, warnings, len(tables), r_idx, ci) for ci, c in enumerate(row)]
+            rows_norm.append(row)
+
+        # Cap headers cells too.
+        headers = [_cap_html_cell(h, warnings, len(tables), -1, ci) for ci, h in enumerate(headers)]
+
+        tables.append(
+            Table(
+                client_table_hint=f"html_dom_t{dom_idx}",
+                title=None,
+                headers=headers,
+                rows=rows_norm,
+                page=None,
+                bbox=None,
+            )
+        )
+    return tables
+
+
+def _html_cell_text(cell) -> str:
+    try:
+        raw = cell.text(separator=" ", strip=True) or ""
+    except Exception:
+        raw = ""
+    # Collapse internal whitespace to a single space; strip.
+    return " ".join(raw.split())
+
+
+def _cap_html_cell(value: str, warnings: list[str], t_idx: int, r_idx: int, c_idx: int) -> str:
+    if len(value) <= _HTML_TABLE_CELL_MAX_CHARS:
+        return value
+    where = (
+        f"tables[{t_idx}].headers[{c_idx}]" if r_idx < 0
+        else f"tables[{t_idx}].rows[{r_idx}].[{c_idx}]"
+    )
+    warnings.append(f"html: {where} truncated at {_HTML_TABLE_CELL_MAX_CHARS} chars")
+    return value[:_HTML_TABLE_CELL_MAX_CHARS]
+
+
 def _extract_html_sections(html: str, canonical_text: str) -> list[Section]:
     """Flat list of sections derived from <h1>..<h6>, using text-level slicing.
 
@@ -286,14 +465,14 @@ class HtmlExtractor(IExtractor):
         except Exception as exc:
             raise CorruptDocumentError(f"HTML parse failed: {exc}") from exc
 
-        # Body text — drop scripts/styles before extracting visible text. We
-        # use the regex on the raw input rather than relying on selectolax's
-        # node walk because the regex stripping is deterministic and the test
-        # corpus expects it.
-        cleaned = _SCRIPT_STYLE.sub("", raw_text)
-        body_tree = HTMLParser(cleaned)
+        # Body text — drop <script>/<style> (with contents) via the DOM before
+        # extracting visible text. DOM removal is exact where a regex is
+        # bypassable (`</script >` etc.), and deterministic for golden tests.
+        body_tree = _strip_script_style(raw_text)
         body = body_tree.body.text(separator="\n") if body_tree.body else ""
         text = canonicalize_text(body)
+        # Script/style-free HTML for the section slicer (it re-parses a string).
+        cleaned = body_tree.html or raw_text
 
         if len(text.encode("utf-8")) > limits.max_text_bytes:
             raise ResourceExhaustedError("text size", limits.max_text_bytes, observed=len(text))
@@ -383,6 +562,13 @@ class HtmlExtractor(IExtractor):
 
             sentences = split_sentences(text, limits, warnings=warnings, language=metadata.language)
 
+        # Structured tables (spec 1.1.0+). Failures never break the extraction.
+        try:
+            tables = _extract_html_structured_tables(tree, warnings)
+        except Exception as exc:
+            tables = []
+            warnings.append(f"html: structured table pass failed ({type(exc).__name__})")
+
         return make_result(
             text=text,
             mime="text/html",
@@ -394,6 +580,7 @@ class HtmlExtractor(IExtractor):
             warnings=warnings or None,
             markdown=markdown,
             sentences=sentences,
+            tables=tables or None,
         )
 
 

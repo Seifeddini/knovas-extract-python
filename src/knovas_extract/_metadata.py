@@ -51,7 +51,10 @@ _BIDI_OVERRIDES = frozenset(
 
 
 def _has_control(s: str) -> bool:
-    return any(ord(c) < 0x20 and c != "\t" for c in s)
+    # C0 (0x00-0x1F, except tab), DEL (0x7F), and C1 (0x80-0x9F). C1 includes
+    # 0x9B, the 8-bit CSI that opens an ANSI escape on terminals honoring it —
+    # same terminal-hijack class as the C0 ESC (0x1B).
+    return any((ord(c) < 0x20 and c != "\t") or 0x7F <= ord(c) <= 0x9F for c in s)
 
 
 def _has_bidi(s: str) -> bool:
