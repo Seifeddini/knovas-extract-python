@@ -21,7 +21,7 @@ jobs:
         with:
           egress-policy: audit
       - uses: actions/checkout@v7
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
       # Pin mutmut to <3.0 so the original --paths-to-mutate CLI works.
@@ -58,7 +58,7 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
       - run: pip install atheris && pip install -e .

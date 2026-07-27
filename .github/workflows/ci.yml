@@ -28,7 +28,7 @@ jobs:
         with:
           egress-policy: audit
       - uses: actions/checkout@v7
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
           cache: 'pip'
@@ -97,7 +97,7 @@ jobs:
         shell: bash
         run: echo "KNOVAS_EXTRACT_SPEC_DIR=${{ github.workspace }}/knovas-extract-spec" >> "$GITHUB_ENV"
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python }}
           cache: 'pip'
@@ -135,7 +135,7 @@ jobs:
         with:
           egress-policy: audit
       - uses: actions/checkout@v7
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
           cache: 'pip'
@@ -197,7 +197,7 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
       - name: Install atheris + project
