@@ -19,7 +19,7 @@ import contextlib
 import hashlib
 import os
 from pathlib import Path
-from typing import Union
+from typing import Literal, Union
 
 from knovas_extract._version import SPEC_VERSION as _SPEC_VERSION
 from knovas_extract._version import __version__ as _PACKAGE_VERSION
@@ -77,6 +77,8 @@ _LAZY_LOADERS: dict[str, str] = {
 
 # Input types accepted by `extract`.
 InputT = Union[str, "os.PathLike[str]", bytes, bytearray, memoryview]
+UseOcrT = bool | Literal["auto"]
+DEFAULT_OCR_LANGUAGE = "deu+eng"
 
 
 def _read_input(input: InputT, limits: Limits) -> tuple[bytes, str | None, str | None]:
@@ -248,6 +250,8 @@ def extract(
     emit_markdown: bool = False,
     emit_sentences: bool = False,
     path: str | None = None,
+    use_ocr: UseOcrT = "auto",
+    ocr_language: str = DEFAULT_OCR_LANGUAGE,
 ) -> ExtractionResult:
     """Extract text + metadata from a document.
 
@@ -273,6 +277,12 @@ def extract(
             Validated by `_paths.validate_source_path` — rejects NUL, ASCII
             control chars, Unicode bidi-override chars (Trojan Source),
             and lengths over ``Limits.max_path_length``.
+        use_ocr: PDF-only. ``"auto"`` (default) runs Tesseract OCR via
+            PyMuPDF when the text layer is empty; ``False`` disables OCR;
+            ``True`` forces OCR even when a text layer exists.
+        ocr_language: Tesseract language pack string passed to PyMuPDF
+            (default ``deu+eng``). Requires matching system ``tesseract-ocr-*``
+            packages.
 
     Returns:
         ExtractionResult — guaranteed to validate against spec/schema.json.
@@ -295,13 +305,16 @@ def extract(
     # the backend isn't installed at call time, an ImportError escapes the
     # extractor and would break the contract — re-frame as DependencyMissingError.
     try:
-        result = extractor.extract(
-            data,
-            filename=filename,
-            limits=limits,
-            emit_markdown=emit_markdown,
-            emit_sentences=emit_sentences,
-        )
+        extract_kwargs: dict[str, object] = {
+            "filename": filename,
+            "limits": limits,
+            "emit_markdown": emit_markdown,
+            "emit_sentences": emit_sentences,
+        }
+        if detected_mime == "application/pdf":
+            extract_kwargs["use_ocr"] = use_ocr
+            extract_kwargs["ocr_language"] = ocr_language
+        result = extractor.extract(data, **extract_kwargs)
     except ImportError as exc:
         missing = getattr(exc, "name", "unknown")
         extra_map = {

@@ -27,7 +27,10 @@ from __future__ import annotations
 
 import contextlib
 import hashlib
-from typing import TYPE_CHECKING, Any, ClassVar, cast
+from typing import TYPE_CHECKING, Any, ClassVar, Literal, cast
+
+UseOcrT = bool | Literal["auto"]
+DEFAULT_OCR_LANGUAGE = "deu+eng"
 
 from knovas_extract.dispatch import MIME_REGISTRY, make_result
 from knovas_extract.errors import (
@@ -376,6 +379,67 @@ def _extract_structured_tables_from_pdf(doc: Any, warnings: list[str]) -> list[T
     return tables
 
 
+def _ocr_should_run(use_ocr: UseOcrT, *, has_text: bool) -> bool:
+    if use_ocr is False:
+        return False
+    if use_ocr is True:
+        return True
+    return not has_text
+
+
+def _page_text_via_ocr(page: Any, *, language: str) -> str:
+    """Extract page text via PyMuPDF + system Tesseract."""
+    try:
+        textpage = page.get_textpage_ocr(language=language)
+        return cast(str, page.get_text(textpage=textpage) or "")
+    except Exception as exc:
+        msg = str(exc).lower()
+        if "tesseract" in msg or "tessdata" in msg:
+            raise DependencyMissingError(
+                "pdf",
+                "tesseract-ocr (system package; install e.g. apt install tesseract-ocr tesseract-ocr-deu)",
+            ) from exc
+        raise CorruptDocumentError(f"PDF OCR failed: {exc}") from exc
+
+
+def _collect_page_texts(
+    doc: Any,
+    page_count: int,
+    limits: Limits,
+    warnings: list[str],
+    *,
+    ocr_language: str | None = None,
+) -> tuple[list[Page], list[str], int]:
+    """Return (pages, raw page text chunks, total UTF-8 bytes)."""
+    pages: list[Page] = []
+    text_chunks: list[str] = []
+    total_bytes = 0
+    use_ocr = ocr_language is not None
+
+    for i in range(page_count):
+        try:
+            page = doc.load_page(i)
+        except Exception as exc:
+            warnings.append(f"page {i}: could not load ({exc})")
+            continue
+        if use_ocr:
+            page_text = _page_text_via_ocr(page, language=ocr_language or DEFAULT_OCR_LANGUAGE)
+        else:
+            page_text = cast(str, page.get_text("text") or "")
+            if not page_text and i == 0:
+                warnings.append(
+                    "first page produced no text (OCR may help for scanned PDFs)"
+                )
+        pages.append(Page(index=i, text=canonicalize_text(page_text)))
+        text_chunks.append(page_text)
+        total_bytes += len(page_text.encode("utf-8"))
+        if total_bytes > limits.max_text_bytes:
+            raise ResourceExhaustedError(
+                "text size", limits.max_text_bytes, observed=total_bytes
+            )
+    return pages, text_chunks, total_bytes
+
+
 def _open_doc(data: bytes) -> fitz.Document:
     """Open the PDF, mapping every PyMuPDF failure mode to a typed ExtractError."""
     import fitz  # local import — keeps top-level startup cost flat
@@ -414,6 +478,8 @@ class PdfExtractor(IExtractor):
         limits: Limits | None = None,
         emit_markdown: bool = False,
         emit_sentences: bool = False,
+        use_ocr: UseOcrT = "auto",
+        ocr_language: str = DEFAULT_OCR_LANGUAGE,
     ) -> ExtractionResult:
         from collections import Counter
 
@@ -432,31 +498,26 @@ class PdfExtractor(IExtractor):
             if page_count > limits.max_pages:
                 raise ResourceExhaustedError("page_count", limits.max_pages, observed=page_count)
 
-            # Per-page text. Caps text size in aggregate; raises if exceeded.
-            pages: list[Page] = []
-            text_chunks: list[str] = []
-            total_bytes = 0  # UTF-8 bytes, to match the byte-denominated cap
-            had_js = False
-            for i in range(page_count):
-                try:
-                    page = doc.load_page(i)
-                except Exception as exc:
-                    warnings.append(f"page {i}: could not load ({exc})")
-                    continue
-                page_text = cast("str", page.get_text("text") or "")
-                if not page_text and i == 0:
-                    warnings.append("first page produced no text (consider OCR for scanned PDFs)")
-                pages.append(Page(index=i, text=canonicalize_text(page_text)))
-                text_chunks.append(page_text)
-                # Count UTF-8 bytes, not characters: max_text_bytes is a byte
-                # cap, and a char count under-counts multibyte text by up to 4x,
-                # which would let the true byte size overrun the cap.
-                total_bytes += len(page_text.encode("utf-8"))
-                if total_bytes > limits.max_text_bytes:
-                    raise ResourceExhaustedError(
-                        "text size", limits.max_text_bytes, observed=total_bytes
+            pages, text_chunks, _total_bytes = _collect_page_texts(
+                doc, page_count, limits, warnings
+            )
+            full_text = canonicalize_text("\n\n".join(text_chunks))
+            ocr_applied = False
+            if _ocr_should_run(use_ocr, has_text=bool(full_text.strip())):
+                warnings.append(
+                    f"pdf: no text layer detected; running Tesseract OCR ({ocr_language})"
+                )
+                pages, text_chunks, _total_bytes = _collect_page_texts(
+                    doc, page_count, limits, warnings, ocr_language=ocr_language
+                )
+                full_text = canonicalize_text("\n\n".join(text_chunks))
+                ocr_applied = True
+                if emit_markdown:
+                    warnings.append(
+                        "pdf: content.markdown omitted for OCR output (no structure to preserve)"
                     )
 
+            had_js = False
             # Doc-level JS check (cheap; runs once). Heuristic only; the
             # only thing we ever do with detected JS is emit a warning.
             with contextlib.suppress(Exception):
@@ -467,8 +528,6 @@ class PdfExtractor(IExtractor):
                     had_js = True
             if had_js:
                 warnings.append("PDF embedded JavaScript ignored (never executed)")
-
-            full_text = canonicalize_text("\n\n".join(text_chunks))
 
             # Authoritative post-canonicalization byte cap. The per-page running
             # total is a cheap early abort; canonicalization can shift the size,
@@ -498,9 +557,9 @@ class PdfExtractor(IExtractor):
                 p.line_end = 1 + full_text.count("\n", 0, loc + len(p.text) - 1)
                 cursor = loc + len(p.text)
 
-            # Markdown path — whole-doc via pymupdf4llm.
+            # Markdown path — whole-doc via pymupdf4llm (text-layer PDFs only).
             markdown: str | None = None
-            if emit_markdown:
+            if emit_markdown and not ocr_applied:
                 markdown = _pdf_to_markdown(doc, full_text, limits, warnings)
 
             raw_meta = doc.metadata or {}

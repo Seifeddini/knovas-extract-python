@@ -118,6 +118,13 @@ def split_sentences(
     cursor = 0
     missing = 0
 
+    # Running newline count so line coords stay O(len(text)) overall.
+    # Counting from 0 per sentence is quadratic and stalls on large,
+    # weakly-punctuated text (tariff tables, log dumps). `cursor` only
+    # moves forward, so each character is counted at most once.
+    newlines_before = 0
+    counted_to = 0
+
     for raw in raw_segments:
         segment = raw.strip()
         if not segment:
@@ -138,8 +145,13 @@ def split_sentences(
         char_end = loc + len(segment)
         cursor = char_end
 
-        line_start = 1 + text.count("\n", 0, char_start) + page_line_offset
-        line_end = 1 + text.count("\n", 0, char_end) + page_line_offset
+        newlines_before += text.count("\n", counted_to, char_start)
+        counted_to = char_start
+        line_start = 1 + newlines_before + page_line_offset
+
+        newlines_before += text.count("\n", counted_to, char_end)
+        counted_to = char_end
+        line_end = 1 + newlines_before + page_line_offset
 
         result.append(
             Sentence(

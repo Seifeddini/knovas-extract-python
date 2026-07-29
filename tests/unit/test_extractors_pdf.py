@@ -120,3 +120,51 @@ def test_dispatch_detects_pdf_from_header() -> None:
     doc.close()
     r = extract(buf.getvalue())  # no mime override; rely on dispatch
     assert r.source.mime_type == "application/pdf"
+
+
+def _image_only_pdf_bytes(text: str = "Invoice 12345") -> bytes:
+    """PDF with rasterized text only (no selectable text layer)."""
+    src = fitz.open()
+    page = src.new_page()
+    page.insert_text((72, 72), text)
+    pix = page.get_pixmap()
+    dst = fitz.open()
+    img_page = dst.new_page(width=pix.width, height=pix.height)
+    img_page.insert_image(img_page.rect, pixmap=pix)
+    buf = io.BytesIO()
+    dst.save(buf)
+    dst.close()
+    src.close()
+    return buf.getvalue()
+
+
+@pytest.mark.unit
+def test_blank_pdf_stays_empty_when_ocr_disabled() -> None:
+    doc = fitz.open()
+    doc.new_page()
+    buf = io.BytesIO()
+    doc.save(buf)
+    doc.close()
+    r = extract(buf.getvalue(), mime="application/pdf", use_ocr=False)
+    assert not r.content.text.strip()
+
+
+@pytest.mark.unit
+def test_image_pdf_has_no_text_layer() -> None:
+    data = _image_only_pdf_bytes()
+    doc = fitz.open(stream=data, filetype="pdf")
+    assert not (doc.load_page(0).get_text("text") or "").strip()
+    doc.close()
+
+
+@pytest.mark.unit
+@pytest.mark.needs_tesseract
+def test_image_pdf_ocr_auto_extracts_text() -> None:
+    import shutil
+
+    if shutil.which("tesseract") is None:
+        pytest.skip("tesseract not installed")
+    data = _image_only_pdf_bytes("Swisscom Invoice")
+    r = extract(data, mime="application/pdf", use_ocr="auto")
+    assert "Swisscom" in r.content.text or "Invoice" in r.content.text
+    assert any("OCR" in w for w in r.warnings)

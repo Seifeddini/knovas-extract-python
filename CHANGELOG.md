@@ -6,6 +6,13 @@ A **major** version bump matches the major of `spec_version` it conforms to.
 
 ## [Unreleased]
 
+### Added — PDF OCR for scanned documents (0.3.0)
+- **`extract(..., use_ocr="auto", ocr_language="deu+eng")`.** When the PDF
+  text layer is empty, PyMuPDF runs Tesseract OCR per page. Requires the
+  system `tesseract-ocr` package and matching language packs (not pip-installable).
+- **`use_ocr=False`** preserves pre-0.3 behaviour (no OCR). **`use_ocr=True`**
+  forces OCR even when a text layer exists.
+
 ### Added — sentence citations (`spec_version` 1.2.0)
 - **`content.sentences` field + `extract(..., emit_sentences=True)` opt-in.**
   Deterministic pysbd-based tokenization with exact char offsets, 1-based
