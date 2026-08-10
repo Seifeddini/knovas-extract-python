@@ -48,7 +48,7 @@ dependencies = [
 minimal = []
 
 # Format extras — opt-in per format.
-pdf  = ["pymupdf >= 1.24.0", "pymupdf4llm >= 0.0.17,< 1.28.1"]  # AGPL (via pymupdf)
+pdf  = ["pymupdf >= 1.24.0", "pymupdf4llm >= 0.0.17,< 1.28.3"]  # AGPL (via pymupdf)
 docx = ["python-docx >= 1.1.2", "mammoth >= 1.8.0"]
 msg  = ["extract-msg >= 0.48.0"]          # GPL
 html = ["selectolax >= 0.3.21"]
