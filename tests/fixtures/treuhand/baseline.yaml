@@ -1,0 +1,134 @@
+# Measured by tests/golden/test_layout_golden.py in update mode — not thresholds.
+digital:
+  pages: 13
+  row_integrity: 0.9934
+  row_cond: 0.9934
+  cell_acc: 0.9981
+  header_recall: 1.0
+  kv_ok: 1.0
+  heading_recall: 1.0
+  heading_precision: 0.9429
+  numeric_f1: 1.0
+  numeric_f1_mean: 1.0
+  intact: 0.9932
+  tau_mean: 0.9723
+  ms_per_page: 5.0319
+  contract:
+    tau: 1.0
+    intact: 1.0
+    bow_missing: 0.0
+    bow_extra: 0.0
+clean300:
+  pages: 13
+  row_integrity: 0.9013
+  row_cond: 0.9133
+  cell_acc: 0.9644
+  header_recall: 0.9773
+  kv_ok: 0.8125
+  heading_recall: 0.2174
+  heading_precision: 0.6667
+  numeric_f1: 0.9851
+  numeric_f1_mean: 0.9989
+  intact: 0.9078
+  tau_mean: 0.9767
+  ms_per_page: 5.5772
+  contract:
+    tau: 1.0
+    intact: 0.9808
+    bow_missing: 0.0
+    bow_extra: 0.0
+office300:
+  pages: 13
+  row_integrity: 0.8487
+  row_cond: 0.9021
+  cell_acc: 0.9081
+  header_recall: 0.9773
+  kv_ok: 0.7188
+  heading_recall: 0.2391
+  heading_precision: 0.6875
+  numeric_f1: 0.8852
+  numeric_f1_mean: 0.982
+  intact: 0.8942
+  tau_mean: 0.9796
+  ms_per_page: 4.8492
+  contract:
+    tau: 1.0
+    intact: 1.0
+    bow_missing: 0.0
+    bow_extra: 0.0
+gray200:
+  pages: 13
+  row_integrity: 0.8289
+  row_cond: 0.8811
+  cell_acc: 0.9287
+  header_recall: 0.9773
+  kv_ok: 0.5938
+  heading_recall: 0.3043
+  heading_precision: 0.6667
+  numeric_f1: 0.9389
+  numeric_f1_mean: 0.989
+  intact: 0.8771
+  tau_mean: 0.9644
+  ms_per_page: 5.3442
+  contract:
+    tau: 1.0
+    intact: 0.9904
+    bow_missing: 0.0
+    bow_extra: 0.0
+skew15:
+  pages: 13
+  row_integrity: 0.8224
+  row_cond: 0.8865
+  cell_acc: 0.9081
+  header_recall: 0.9773
+  kv_ok: 0.6875
+  heading_recall: 0.2391
+  heading_precision: 0.6875
+  numeric_f1: 0.832
+  numeric_f1_mean: 0.9737
+  intact: 0.8703
+  tau_mean: 0.9759
+  ms_per_page: 5.4418
+  contract:
+    tau: 1.0
+    intact: 0.9904
+    bow_missing: 0.0
+    bow_extra: 0.0
+stamp:
+  pages: 13
+  row_integrity: 0.7632
+  row_cond: 0.8788
+  cell_acc: 0.8649
+  header_recall: 0.8636
+  kv_ok: 0.6562
+  heading_recall: 0.2391
+  heading_precision: 0.55
+  numeric_f1: 0.7155
+  numeric_f1_mean: 0.9594
+  intact: 0.8123
+  tau_mean: 0.9588
+  ms_per_page: 4.937
+  contract:
+    tau: 0.8651
+    intact: 0.8942
+    bow_missing: 0.0
+    bow_extra: 0.0
+fax150:
+  pages: 13
+  row_integrity: 0.5132
+  row_cond: 0.7358
+  cell_acc: 0.7542
+  header_recall: 0.7955
+  kv_ok: 0.4375
+  heading_recall: 0.2821
+  heading_precision: 0.4231
+  numeric_f1: 0.5696
+  numeric_f1_mean: 0.8885
+  intact: 0.7235
+  tau_mean: 0.9366
+  ms_per_page: 5.101
+  contract:
+    tau: 1.0
+    intact: 0.6635
+    bow_missing: 0.0
+    bow_extra: 0.0

@@ -1,0 +1,77 @@
+version: 1
+description: >
+  Treuhand golden-layout fixtures: saved word boxes for 13 pages of 10 synthetic Swiss
+  fiduciary documents (reportlab renders), as a born-digital text layer (PyMuPDF words
+  with span size/bold) and as Tesseract words for six scan degradations (config
+  tapi_fast_pro3f: tesserocr, deu+eng, tessdata_fast, psm 3, autorotate, deskew,
+  rule filter), plus ground truth (tables, key-value pairs, headings, prose items,
+  ignore regions). No PDF and no Tesseract are needed to run the tests.
+page_record: >
+  pages/<doc>_p<k>.<source>.json: doc, page, source, ocr, page_size [w, h], to_gt (affine
+  word-space -> ground-truth page space, PyMuPDF matrix order a b c d e f), words
+  (digital: [x0, y0, x1, y1, text, size, bold, conf, block, par, line]; OCR:
+  [x0, y0, x1, y1, text, conf, block, par, line]), rules ([kind, x0, y0, x1, y1]),
+  plain_text (the plain-mode page text: page.get_text("text") for digital pages, the
+  Tesseract text for OCR pages). expected/<doc>_p<k>.<source>.md is the committed
+  rendering (byte-identical guard); baseline.yaml holds the measured numbers.
+update: >
+  KNOVAS_LAYOUT_UPDATE_GOLDEN=1 pytest tests/golden/test_layout_golden.py rewrites
+  expected/*.md and baseline.yaml (never the gates below).
+ocr_config: tapi_fast_pro3f
+contract_doc: aktionaerbindungsvertrag
+sources: [digital, clean300, office300, gray200, skew15, stamp, fax150]
+docs:
+  jahresrechnung: 2
+  steuererklaerung: 2
+  lohnausweis: 1
+  bankauszug: 1
+  mwst_abrechnung: 1
+  aktionaerbindungsvertrag: 2
+  bilan_fr: 1
+  brief: 1
+  rechnung_qr: 1
+  protokoll_gv: 1
+# Gates (plan §7, decision D8: at or just below the measured prototype numbers).
+# heading_recall/precision are measured on structured pages only (D4: headings are
+# emitted on structured pages only; unstructured pages pass through verbatim).
+# numeric_f1 is the minimum over pages. contract_* gates apply to the two-column
+# contract (law-firm gate); "hard" bag-of-words means layout tokens == input words
+# minus furniture, exactly. *_advisory values are reported, not asserted (M3 target).
+gates:
+  digital:
+    row_integrity: 0.98
+    row_cond: 0.98
+    cell_acc: 0.97
+    header_recall: 1.0
+    kv_ok: 0.90
+    heading_recall: 0.95
+    heading_precision: 0.80
+    numeric_f1: 0.995
+    contract_tau: 0.98
+    contract_intact: 0.97
+    contract_bow: hard
+  clean300:
+    row_integrity: 0.90
+    contract_tau: 0.98
+    contract_intact: 0.97
+    contract_bow: hard
+  office300:
+    row_integrity: 0.84
+    row_cond: 0.88
+    contract_tau: 0.98
+    contract_intact: 0.97
+    contract_bow: hard
+  gray200:
+    row_integrity: 0.82
+    contract_tau_advisory: 0.90
+  skew15:
+    row_integrity: 0.80
+    contract_tau_advisory: 0.90
+  stamp:
+    row_integrity: 0.76
+    contract_tau_advisory: 0.90
+  fax150:
+    contract_tau: 0.98
+    contract_bow: hard
+timing:
+  max_ms_per_page: 20
