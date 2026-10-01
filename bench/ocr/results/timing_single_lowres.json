@@ -1,0 +1,314 @@
+{
+ "tfast_psm4": {
+  "s_per_page_median": 2.857,
+  "s_per_page_mean": 2.853,
+  "system_busy": 0.295,
+  "pages": {
+   "fax150/jahresrechnung_p0": {
+    "runs": [
+     2.839,
+     2.801,
+     2.779
+    ],
+    "median": 2.801
+   },
+   "fax150/bankauszug_p0": {
+    "runs": [
+     3.666,
+     4.02,
+     3.72
+    ],
+    "median": 3.72
+   },
+   "gray200/jahresrechnung_p0": {
+    "runs": [
+     1.922,
+     2.088,
+     1.976
+    ],
+    "median": 1.976
+   },
+   "gray200/bankauszug_p0": {
+    "runs": [
+     3.046,
+     2.884,
+     2.913
+    ],
+    "median": 2.913
+   }
+  }
+ },
+ "tfast_psm4_native": {
+  "s_per_page_median": 1.841,
+  "s_per_page_mean": 1.817,
+  "system_busy": 0.263,
+  "pages": {
+   "fax150/jahresrechnung_p0": {
+    "runs": [
+     1.617,
+     1.523,
+     1.534
+    ],
+    "median": 1.534
+   },
+   "fax150/bankauszug_p0": {
+    "runs": [
+     2.233,
+     2.111,
+     2.191
+    ],
+    "median": 2.191
+   },
+   "gray200/jahresrechnung_p0": {
+    "runs": [
+     1.395,
+     1.429,
+     1.317
+    ],
+    "median": 1.395
+   },
+   "gray200/bankauszug_p0": {
+    "runs": [
+     2.248,
+     2.149,
+     2.067
+    ],
+    "median": 2.149
+   }
+  }
+ },
+ "tfast_psm4_400": {
+  "s_per_page_median": 3.529,
+  "s_per_page_mean": 3.483,
+  "system_busy": 0.361,
+  "pages": {
+   "fax150/jahresrechnung_p0": {
+    "runs": [
+     3.348,
+     3.858,
+     3.463
+    ],
+    "median": 3.463
+   },
+   "fax150/bankauszug_p0": {
+    "runs": [
+     4.103,
+     4.315,
+     4.454
+    ],
+    "median": 4.315
+   },
+   "gray200/jahresrechnung_p0": {
+    "runs": [
+     2.915,
+     2.559,
+     2.5
+    ],
+    "median": 2.559
+   },
+   "gray200/bankauszug_p0": {
+    "runs": [
+     3.469,
+     3.899,
+     3.594
+    ],
+    "median": 3.594
+   }
+  }
+ },
+ "tfast_psm3": {
+  "s_per_page_median": 2.505,
+  "s_per_page_mean": 2.71,
+  "system_busy": 0.507,
+  "pages": {
+   "fax150/jahresrechnung_p0": {
+    "runs": [
+     2.323,
+     2.255,
+     2.27
+    ],
+    "median": 2.27
+   },
+   "fax150/bankauszug_p0": {
+    "runs": [
+     4.034,
+     3.656,
+     3.845
+    ],
+    "median": 3.845
+   },
+   "gray200/jahresrechnung_p0": {
+    "runs": [
+     2.116,
+     1.987,
+     1.953
+    ],
+    "median": 1.987
+   },
+   "gray200/bankauszug_p0": {
+    "runs": [
+     2.739,
+     2.737,
+     2.857
+    ],
+    "median": 2.739
+   }
+  }
+ },
+ "tfast_psm3_native": {
+  "s_per_page_median": 1.8,
+  "s_per_page_mean": 1.811,
+  "system_busy": 0.507,
+  "pages": {
+   "fax150/jahresrechnung_p0": {
+    "runs": [
+     1.514,
+     1.504,
+     1.491
+    ],
+    "median": 1.504
+   },
+   "fax150/bankauszug_p0": {
+    "runs": [
+     2.095,
+     2.047,
+     2.128
+    ],
+    "median": 2.095
+   },
+   "gray200/jahresrechnung_p0": {
+    "runs": [
+     1.434,
+     1.405,
+     1.491
+    ],
+    "median": 1.434
+   },
+   "gray200/bankauszug_p0": {
+    "runs": [
+     2.211,
+     2.277,
+     2.127
+    ],
+    "median": 2.211
+   }
+  }
+ },
+ "tfast_pro3": {
+  "s_per_page_median": 1.853,
+  "s_per_page_mean": 1.853,
+  "system_busy": 0.293,
+  "pages": {
+   "fax150/jahresrechnung_p0": {
+    "runs": [
+     1.442,
+     1.443,
+     1.545
+    ],
+    "median": 1.443
+   },
+   "fax150/bankauszug_p0": {
+    "runs": [
+     2.146,
+     2.151,
+     2.247
+    ],
+    "median": 2.151
+   },
+   "gray200/jahresrechnung_p0": {
+    "runs": [
+     1.592,
+     1.439,
+     1.555
+    ],
+    "median": 1.555
+   },
+   "gray200/bankauszug_p0": {
+    "runs": [
+     2.295,
+     2.265,
+     2.181
+    ],
+    "median": 2.265
+   }
+  }
+ },
+ "tbest_psm3": {
+  "s_per_page_median": 6.101,
+  "s_per_page_mean": 6.266,
+  "system_busy": 0.292,
+  "pages": {
+   "fax150/jahresrechnung_p0": {
+    "runs": [
+     4.949,
+     5.062,
+     4.937
+    ],
+    "median": 4.949
+   },
+   "fax150/bankauszug_p0": {
+    "runs": [
+     8.947,
+     8.866,
+     8.784
+    ],
+    "median": 8.866
+   },
+   "gray200/jahresrechnung_p0": {
+    "runs": [
+     4.125,
+     3.996,
+     3.821
+    ],
+    "median": 3.996
+   },
+   "gray200/bankauszug_p0": {
+    "runs": [
+     6.978,
+     7.253,
+     7.37
+    ],
+    "median": 7.253
+   }
+  }
+ },
+ "tbest_pro3_dfe": {
+  "s_per_page_median": 5.83,
+  "s_per_page_mean": 5.655,
+  "system_busy": 0.507,
+  "pages": {
+   "fax150/jahresrechnung_p0": {
+    "runs": [
+     4.415,
+     4.357,
+     4.355
+    ],
+    "median": 4.357
+   },
+   "fax150/bankauszug_p0": {
+    "runs": [
+     6.806,
+     7.555,
+     7.303
+    ],
+    "median": 7.303
+   },
+   "gray200/jahresrechnung_p0": {
+    "runs": [
+     3.412,
+     3.614,
+     3.659
+    ],
+    "median": 3.614
+   },
+   "gray200/bankauszug_p0": {
+    "runs": [
+     7.347,
+     7.115,
+     7.617
+    ],
+    "median": 7.347
+   }
+  }
+ }
+}

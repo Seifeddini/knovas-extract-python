@@ -1,0 +1,10 @@
+corpus/
+gt/
+ocr_out/
+tessdata_fast/
+tessdata_best/
+_viz/
+results/page_scores.csv
+results/summary.json
+results/*.log
+__pycache__/

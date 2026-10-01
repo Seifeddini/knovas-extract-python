@@ -1,0 +1,1432 @@
+{
+ "tfast_psm3": {
+  "s_per_page_median": 2.229,
+  "s_per_page_mean": 2.521,
+  "system_busy": 0.263,
+  "pages": {
+   "office300/jahresrechnung_p0": {
+    "runs": [
+     1.883,
+     1.809,
+     1.888
+    ],
+    "median": 1.883
+   },
+   "office300/jahresrechnung_p1": {
+    "runs": [
+     1.809,
+     1.796,
+     1.817
+    ],
+    "median": 1.809
+   },
+   "office300/bankauszug_p0": {
+    "runs": [
+     2.736,
+     3.034,
+     2.798
+    ],
+    "median": 2.798
+   },
+   "office300/lohnausweis_p0": {
+    "runs": [
+     2.164,
+     2.107,
+     2.161
+    ],
+    "median": 2.161
+   },
+   "office300/aktionaerbindungsvertrag_p0": {
+    "runs": [
+     4.014,
+     4.175,
+     4.223
+    ],
+    "median": 4.175
+   },
+   "office300/protokoll_gv_p0": {
+    "runs": [
+     2.387,
+     2.203,
+     2.298
+    ],
+    "median": 2.298
+   }
+  }
+ },
+ "tfast_pro3": {
+  "s_per_page_median": 2.411,
+  "s_per_page_mean": 2.738,
+  "system_busy": 0.271,
+  "pages": {
+   "office300/jahresrechnung_p0": {
+    "runs": [
+     2.531,
+     2.142,
+     2.097
+    ],
+    "median": 2.142
+   },
+   "office300/jahresrechnung_p1": {
+    "runs": [
+     2.131,
+     2.101,
+     2.093
+    ],
+    "median": 2.101
+   },
+   "office300/bankauszug_p0": {
+    "runs": [
+     2.967,
+     3.023,
+     2.925
+    ],
+    "median": 2.967
+   },
+   "office300/lohnausweis_p0": {
+    "runs": [
+     2.337,
+     2.419,
+     2.341
+    ],
+    "median": 2.341
+   },
+   "office300/aktionaerbindungsvertrag_p0": {
+    "runs": [
+     4.325,
+     4.415,
+     4.394
+    ],
+    "median": 4.394
+   },
+   "office300/protokoll_gv_p0": {
+    "runs": [
+     2.434,
+     2.528,
+     2.481
+    ],
+    "median": 2.481
+   }
+  }
+ },
+ "tbest_pro3_dfe": {
+  "s_per_page_median": 5.094,
+  "s_per_page_mean": 6.211,
+  "system_busy": 0.266,
+  "pages": {
+   "office300/jahresrechnung_p0": {
+    "runs": [
+     4.032,
+     3.966,
+     3.936
+    ],
+    "median": 3.966
+   },
+   "office300/jahresrechnung_p1": {
+    "runs": [
+     4.678,
+     4.775,
+     4.699
+    ],
+    "median": 4.699
+   },
+   "office300/bankauszug_p0": {
+    "runs": [
+     7.957,
+     7.8,
+     7.768
+    ],
+    "median": 7.8
+   },
+   "office300/lohnausweis_p0": {
+    "runs": [
+     5.04,
+     5.237,
+     5.103
+    ],
+    "median": 5.103
+   },
+   "office300/aktionaerbindungsvertrag_p0": {
+    "runs": [
+     10.614,
+     10.454,
+     10.774
+    ],
+    "median": 10.614
+   },
+   "office300/protokoll_gv_p0": {
+    "runs": [
+     5.266,
+     4.974,
+     5.085
+    ],
+    "median": 5.085
+   }
+  }
+ },
+ "tbest_psm3": {
+  "s_per_page_median": 4.713,
+  "s_per_page_mean": 5.676,
+  "system_busy": 0.256,
+  "pages": {
+   "office300/jahresrechnung_p0": {
+    "runs": [
+     3.723,
+     3.629,
+     3.617
+    ],
+    "median": 3.629
+   },
+   "office300/jahresrechnung_p1": {
+    "runs": [
+     4.457,
+     4.373,
+     4.42
+    ],
+    "median": 4.42
+   },
+   "office300/bankauszug_p0": {
+    "runs": [
+     6.859,
+     6.567,
+     6.663
+    ],
+    "median": 6.663
+   },
+   "office300/lohnausweis_p0": {
+    "runs": [
+     4.765,
+     4.764,
+     4.939
+    ],
+    "median": 4.765
+   },
+   "office300/aktionaerbindungsvertrag_p0": {
+    "runs": [
+     10.076,
+     9.919,
+     9.893
+    ],
+    "median": 9.919
+   },
+   "office300/protokoll_gv_p0": {
+    "runs": [
+     4.822,
+     4.441,
+     4.66
+    ],
+    "median": 4.66
+   }
+  }
+ },
+ "mupdf_statusquo": {
+  "s_per_page_median": 3.042,
+  "s_per_page_mean": 4.063,
+  "system_busy": 0.257,
+  "pages": {
+   "office300/jahresrechnung_p0": {
+    "runs": [
+     2.746,
+     2.743,
+     2.709
+    ],
+    "median": 2.743
+   },
+   "office300/jahresrechnung_p1": {
+    "runs": [
+     2.515,
+     2.636,
+     2.508
+    ],
+    "median": 2.515
+   },
+   "office300/bankauszug_p0": {
+    "runs": [
+     4.84,
+     4.955,
+     5.002
+    ],
+    "median": 4.955
+   },
+   "office300/lohnausweis_p0": {
+    "runs": [
+     3.365,
+     3.342,
+     3.308
+    ],
+    "median": 3.342
+   },
+   "office300/aktionaerbindungsvertrag_p0": {
+    "runs": [
+     8.314,
+     8.3,
+     8.164
+    ],
+    "median": 8.3
+   },
+   "office300/protokoll_gv_p0": {
+    "runs": [
+     2.524,
+     2.506,
+     2.726
+    ],
+    "median": 2.524
+   }
+  }
+ },
+ "mupdf_300_full": {
+  "s_per_page_median": 3.569,
+  "s_per_page_mean": 4.458,
+  "system_busy": 0.258,
+  "pages": {
+   "office300/jahresrechnung_p0": {
+    "runs": [
+     2.726,
+     2.649,
+     2.658
+    ],
+    "median": 2.658
+   },
+   "office300/jahresrechnung_p1": {
+    "runs": [
+     2.261,
+     2.437,
+     2.27
+    ],
+    "median": 2.27
+   },
+   "office300/bankauszug_p0": {
+    "runs": [
+     4.953,
+     5.138,
+     4.94
+    ],
+    "median": 4.953
+   },
+   "office300/lohnausweis_p0": {
+    "runs": [
+     3.764,
+     3.77,
+     3.753
+    ],
+    "median": 3.764
+   },
+   "office300/aktionaerbindungsvertrag_p0": {
+    "runs": [
+     9.69,
+     9.73,
+     9.753
+    ],
+    "median": 9.73
+   },
+   "office300/protokoll_gv_p0": {
+    "runs": [
+     3.461,
+     3.357,
+     3.375
+    ],
+    "median": 3.375
+   }
+  }
+ },
+ "tfast_psm4": {
+  "s_per_page_median": 2.201,
+  "s_per_page_mean": 2.575,
+  "system_busy": 0.268,
+  "pages": {
+   "office300/jahresrechnung_p0": {
+    "runs": [
+     1.916,
+     1.946,
+     1.857
+    ],
+    "median": 1.916
+   },
+   "office300/jahresrechnung_p1": {
+    "runs": [
+     1.79,
+     1.857,
+     1.869
+    ],
+    "median": 1.857
+   },
+   "office300/bankauszug_p0": {
+    "runs": [
+     2.869,
+     2.831,
+     3.059
+    ],
+    "median": 2.869
+   },
+   "office300/lohnausweis_p0": {
+    "runs": [
+     2.16,
+     2.206,
+     2.282
+    ],
+    "median": 2.206
+   },
+   "office300/aktionaerbindungsvertrag_p0": {
+    "runs": [
+     4.639,
+     4.406,
+     4.372
+    ],
+    "median": 4.406
+   },
+   "office300/protokoll_gv_p0": {
+    "runs": [
+     2.196,
+     2.179,
+     2.223
+    ],
+    "median": 2.196
+   }
+  }
+ },
+ "tapi_fast_psm3": {
+  "s_per_page_median": 1.589,
+  "s_per_page_mean": 1.764,
+  "system_busy": 0.265,
+  "pages": {
+   "office300/jahresrechnung_p0": {
+    "runs": [
+     1.201,
+     1.221,
+     1.283
+    ],
+    "median": 1.221
+   },
+   "office300/jahresrechnung_p1": {
+    "runs": [
+     1.246,
+     1.186,
+     1.137
+    ],
+    "median": 1.186
+   },
+   "office300/bankauszug_p0": {
+    "runs": [
+     1.957,
+     1.908,
+     1.966
+    ],
+    "median": 1.957
+   },
+   "office300/lohnausweis_p0": {
+    "runs": [
+     1.618,
+     1.662,
+     1.691
+    ],
+    "median": 1.662
+   },
+   "office300/aktionaerbindungsvertrag_p0": {
+    "runs": [
+     2.999,
+     3.125,
+     3.041
+    ],
+    "median": 3.041
+   },
+   "office300/protokoll_gv_p0": {
+    "runs": [
+     1.549,
+     1.473,
+     1.516
+    ],
+    "median": 1.516
+   }
+  }
+ },
+ "tfast_pro3_dfe": {
+  "s_per_page_median": 2.958,
+  "s_per_page_mean": 3.192,
+  "system_busy": 0.257,
+  "pages": {
+   "office300/jahresrechnung_p0": {
+    "runs": [
+     2.544,
+     2.479,
+     2.56
+    ],
+    "median": 2.544
+   },
+   "office300/jahresrechnung_p1": {
+    "runs": [
+     2.367,
+     2.388,
+     2.518
+    ],
+    "median": 2.388
+   },
+   "office300/bankauszug_p0": {
+    "runs": [
+     3.746,
+     3.584,
+     3.593
+    ],
+    "median": 3.593
+   },
+   "office300/lohnausweis_p0": {
+    "runs": [
+     3.065,
+     2.931,
+     2.797
+    ],
+    "median": 2.931
+   },
+   "office300/aktionaerbindungsvertrag_p0": {
+    "runs": [
+     4.718,
+     4.667,
+     4.713
+    ],
+    "median": 4.713
+   },
+   "office300/protokoll_gv_p0": {
+    "runs": [
+     2.874,
+     3.019,
+     2.985
+    ],
+    "median": 2.985
+   }
+  }
+ },
+ "tfast_psm6": {
+  "s_per_page_median": 2.458,
+  "s_per_page_mean": 2.681,
+  "system_busy": 0.387,
+  "pages": {
+   "office300/jahresrechnung_p0": {
+    "runs": [
+     1.63,
+     1.746,
+     1.664
+    ],
+    "median": 1.664
+   },
+   "office300/jahresrechnung_p1": {
+    "runs": [
+     1.757,
+     1.737,
+     1.709
+    ],
+    "median": 1.737
+   },
+   "office300/bankauszug_p0": {
+    "runs": [
+     2.545,
+     2.73,
+     2.69
+    ],
+    "median": 2.69
+   },
+   "office300/lohnausweis_p0": {
+    "runs": [
+     2.661,
+     2.832,
+     2.911
+    ],
+    "median": 2.832
+   },
+   "office300/aktionaerbindungsvertrag_p0": {
+    "runs": [
+     5.049,
+     4.904,
+     4.94
+    ],
+    "median": 4.94
+   },
+   "office300/protokoll_gv_p0": {
+    "runs": [
+     2.244,
+     2.225,
+     2.113
+    ],
+    "median": 2.225
+   }
+  }
+ },
+ "tfast_psm11": {
+  "s_per_page_median": 2.244,
+  "s_per_page_mean": 2.484,
+  "system_busy": 0.31,
+  "pages": {
+   "office300/jahresrechnung_p0": {
+    "runs": [
+     1.84,
+     1.994,
+     1.83
+    ],
+    "median": 1.84
+   },
+   "office300/jahresrechnung_p1": {
+    "runs": [
+     1.925,
+     2.023,
+     1.858
+    ],
+    "median": 1.925
+   },
+   "office300/bankauszug_p0": {
+    "runs": [
+     2.418,
+     2.527,
+     2.414
+    ],
+    "median": 2.418
+   },
+   "office300/lohnausweis_p0": {
+    "runs": [
+     2.181,
+     2.224,
+     2.173
+    ],
+    "median": 2.181
+   },
+   "office300/aktionaerbindungsvertrag_p0": {
+    "runs": [
+     4.261,
+     4.092,
+     4.232
+    ],
+    "median": 4.232
+   },
+   "office300/protokoll_gv_p0": {
+    "runs": [
+     2.397,
+     2.29,
+     2.308
+    ],
+    "median": 2.308
+   }
+  }
+ },
+ "tfast_pro3_deskew": {
+  "s_per_page_median": 2.651,
+  "s_per_page_mean": 2.913,
+  "system_busy": 0.335,
+  "pages": {
+   "office300/jahresrechnung_p0": {
+    "runs": [
+     2.228,
+     2.138,
+     2.103
+    ],
+    "median": 2.138
+   },
+   "office300/jahresrechnung_p1": {
+    "runs": [
+     2.335,
+     2.291,
+     2.321
+    ],
+    "median": 2.321
+   },
+   "office300/bankauszug_p0": {
+    "runs": [
+     3.113,
+     3.066,
+     3.124
+    ],
+    "median": 3.113
+   },
+   "office300/lohnausweis_p0": {
+    "runs": [
+     2.536,
+     2.589,
+     2.688
+    ],
+    "median": 2.589
+   },
+   "office300/aktionaerbindungsvertrag_p0": {
+    "runs": [
+     4.602,
+     4.697,
+     4.598
+    ],
+    "median": 4.602
+   },
+   "office300/protokoll_gv_p0": {
+    "runs": [
+     2.754,
+     2.714,
+     2.655
+    ],
+    "median": 2.714
+   }
+  }
+ },
+ "tbest_pro3": {
+  "s_per_page_median": 5.052,
+  "s_per_page_mean": 6.1,
+  "system_busy": 0.27,
+  "pages": {
+   "office300/jahresrechnung_p0": {
+    "runs": [
+     3.699,
+     3.73,
+     3.755
+    ],
+    "median": 3.73
+   },
+   "office300/jahresrechnung_p1": {
+    "runs": [
+     4.603,
+     4.83,
+     4.817
+    ],
+    "median": 4.817
+   },
+   "office300/bankauszug_p0": {
+    "runs": [
+     7.869,
+     7.302,
+     7.339
+    ],
+    "median": 7.339
+   },
+   "office300/lohnausweis_p0": {
+    "runs": [
+     5.004,
+     5.24,
+     5.106
+    ],
+    "median": 5.106
+   },
+   "office300/aktionaerbindungsvertrag_p0": {
+    "runs": [
+     10.415,
+     10.612,
+     10.749
+    ],
+    "median": 10.612
+   },
+   "office300/protokoll_gv_p0": {
+    "runs": [
+     5.041,
+     4.998,
+     4.934
+    ],
+    "median": 4.998
+   }
+  }
+ },
+ "tbest_psm4": {
+  "s_per_page_median": 4.831,
+  "s_per_page_mean": 6.053,
+  "system_busy": 0.267,
+  "pages": {
+   "office300/jahresrechnung_p0": {
+    "runs": [
+     3.869,
+     3.533,
+     3.651
+    ],
+    "median": 3.651
+   },
+   "office300/jahresrechnung_p1": {
+    "runs": [
+     4.468,
+     4.453,
+     4.468
+    ],
+    "median": 4.468
+   },
+   "office300/bankauszug_p0": {
+    "runs": [
+     6.962,
+     6.985,
+     6.946
+    ],
+    "median": 6.962
+   },
+   "office300/lohnausweis_p0": {
+    "runs": [
+     4.872,
+     4.905,
+     5.067
+    ],
+    "median": 4.905
+   },
+   "office300/aktionaerbindungsvertrag_p0": {
+    "runs": [
+     11.574,
+     11.255,
+     11.614
+    ],
+    "median": 11.574
+   },
+   "office300/protokoll_gv_p0": {
+    "runs": [
+     4.756,
+     4.76,
+     4.615
+    ],
+    "median": 4.756
+   }
+  }
+ },
+ "tfast_psm4_noinvert": {
+  "s_per_page_median": 2.183,
+  "s_per_page_mean": 2.557,
+  "system_busy": 0.273,
+  "pages": {
+   "office300/jahresrechnung_p0": {
+    "runs": [
+     1.87,
+     1.947,
+     1.833
+    ],
+    "median": 1.87
+   },
+   "office300/jahresrechnung_p1": {
+    "runs": [
+     2.014,
+     1.85,
+     1.844
+    ],
+    "median": 1.85
+   },
+   "office300/bankauszug_p0": {
+    "runs": [
+     2.721,
+     2.782,
+     2.696
+    ],
+    "median": 2.721
+   },
+   "office300/lohnausweis_p0": {
+    "runs": [
+     2.179,
+     2.046,
+     2.098
+    ],
+    "median": 2.098
+   },
+   "office300/aktionaerbindungsvertrag_p0": {
+    "runs": [
+     4.536,
+     4.467,
+     4.902
+    ],
+    "median": 4.536
+   },
+   "office300/protokoll_gv_p0": {
+    "runs": [
+     2.269,
+     2.213,
+     2.344
+    ],
+    "median": 2.269
+   }
+  }
+ },
+ "tfast_psm4_sauvola": {
+  "s_per_page_median": 2.413,
+  "s_per_page_mean": 2.744,
+  "system_busy": 0.322,
+  "pages": {
+   "office300/jahresrechnung_p0": {
+    "runs": [
+     1.99,
+     1.928,
+     2.197
+    ],
+    "median": 1.99
+   },
+   "office300/jahresrechnung_p1": {
+    "runs": [
+     2.149,
+     2.126,
+     2.104
+    ],
+    "median": 2.126
+   },
+   "office300/bankauszug_p0": {
+    "runs": [
+     3.43,
+     3.009,
+     2.913
+    ],
+    "median": 3.009
+   },
+   "office300/lohnausweis_p0": {
+    "runs": [
+     2.335,
+     2.317,
+     2.518
+    ],
+    "median": 2.335
+   },
+   "office300/aktionaerbindungsvertrag_p0": {
+    "runs": [
+     4.588,
+     4.516,
+     4.33
+    ],
+    "median": 4.516
+   },
+   "office300/protokoll_gv_p0": {
+    "runs": [
+     2.49,
+     2.501,
+     2.423
+    ],
+    "median": 2.49
+   }
+  }
+ },
+ "tfast_psm4_deskew": {
+  "s_per_page_median": 2.376,
+  "s_per_page_mean": 2.756,
+  "system_busy": 0.266,
+  "pages": {
+   "office300/jahresrechnung_p0": {
+    "runs": [
+     1.957,
+     1.894,
+     1.923
+    ],
+    "median": 1.923
+   },
+   "office300/jahresrechnung_p1": {
+    "runs": [
+     2.123,
+     2.083,
+     2.2
+    ],
+    "median": 2.123
+   },
+   "office300/bankauszug_p0": {
+    "runs": [
+     3.04,
+     2.874,
+     3.095
+    ],
+    "median": 3.04
+   },
+   "office300/lohnausweis_p0": {
+    "runs": [
+     2.294,
+     2.309,
+     2.291
+    ],
+    "median": 2.294
+   },
+   "office300/aktionaerbindungsvertrag_p0": {
+    "runs": [
+     4.626,
+     4.801,
+     4.7
+    ],
+    "median": 4.7
+   },
+   "office300/protokoll_gv_p0": {
+    "runs": [
+     2.458,
+     2.473,
+     2.421
+    ],
+    "median": 2.458
+   }
+  }
+ },
+ "tfast_psm4_dfe": {
+  "s_per_page_median": 2.486,
+  "s_per_page_mean": 2.864,
+  "system_busy": 0.255,
+  "pages": {
+   "office300/jahresrechnung_p0": {
+    "runs": [
+     1.964,
+     2.022,
+     2.118
+    ],
+    "median": 2.022
+   },
+   "office300/jahresrechnung_p1": {
+    "runs": [
+     2.088,
+     2.116,
+     2.063
+    ],
+    "median": 2.088
+   },
+   "office300/bankauszug_p0": {
+    "runs": [
+     3.642,
+     3.328,
+     3.2
+    ],
+    "median": 3.328
+   },
+   "office300/lohnausweis_p0": {
+    "runs": [
+     2.48,
+     2.598,
+     2.513
+    ],
+    "median": 2.513
+   },
+   "office300/aktionaerbindungsvertrag_p0": {
+    "runs": [
+     4.9,
+     4.761,
+     4.771
+    ],
+    "median": 4.771
+   },
+   "office300/protokoll_gv_p0": {
+    "runs": [
+     2.475,
+     2.397,
+     2.459
+    ],
+    "median": 2.459
+   }
+  }
+ },
+ "tbest_psm4_dfe": {
+  "s_per_page_median": 4.923,
+  "s_per_page_mean": 6.04,
+  "system_busy": 0.286,
+  "pages": {
+   "office300/jahresrechnung_p0": {
+    "runs": [
+     3.576,
+     3.569,
+     3.579
+    ],
+    "median": 3.576
+   },
+   "office300/jahresrechnung_p1": {
+    "runs": [
+     4.499,
+     4.869,
+     4.626
+    ],
+    "median": 4.626
+   },
+   "office300/bankauszug_p0": {
+    "runs": [
+     8.499,
+     7.868,
+     7.881
+    ],
+    "median": 7.881
+   },
+   "office300/lohnausweis_p0": {
+    "runs": [
+     4.818,
+     4.947,
+     5.121
+    ],
+    "median": 4.947
+   },
+   "office300/aktionaerbindungsvertrag_p0": {
+    "runs": [
+     10.264,
+     10.31,
+     10.369
+    ],
+    "median": 10.31
+   },
+   "office300/protokoll_gv_p0": {
+    "runs": [
+     4.899,
+     4.901,
+     4.896
+    ],
+    "median": 4.899
+   }
+  }
+ },
+ "tfast_psm4_osd": {
+  "s_per_page_median": 3.04,
+  "s_per_page_mean": 3.402,
+  "system_busy": 0.261,
+  "pages": {
+   "office300/jahresrechnung_p0": {
+    "runs": [
+     2.756,
+     2.803,
+     2.737
+    ],
+    "median": 2.756
+   },
+   "office300/jahresrechnung_p1": {
+    "runs": [
+     2.656,
+     2.65,
+     2.769
+    ],
+    "median": 2.656
+   },
+   "office300/bankauszug_p0": {
+    "runs": [
+     3.654,
+     3.65,
+     3.581
+    ],
+    "median": 3.65
+   },
+   "office300/lohnausweis_p0": {
+    "runs": [
+     3.013,
+     3.298,
+     3.066
+    ],
+    "median": 3.066
+   },
+   "office300/aktionaerbindungsvertrag_p0": {
+    "runs": [
+     5.269,
+     5.22,
+     5.383
+    ],
+    "median": 5.269
+   },
+   "office300/protokoll_gv_p0": {
+    "runs": [
+     3.016,
+     2.992,
+     3.015
+    ],
+    "median": 3.015
+   }
+  }
+ },
+ "tfast_psm4_autorot": {
+  "s_per_page_median": 2.226,
+  "s_per_page_mean": 2.64,
+  "system_busy": 0.257,
+  "pages": {
+   "office300/jahresrechnung_p0": {
+    "runs": [
+     2.122,
+     1.827,
+     2.0
+    ],
+    "median": 2.0
+   },
+   "office300/jahresrechnung_p1": {
+    "runs": [
+     1.806,
+     1.908,
+     2.029
+    ],
+    "median": 1.908
+   },
+   "office300/bankauszug_p0": {
+    "runs": [
+     2.994,
+     3.001,
+     2.807
+    ],
+    "median": 2.994
+   },
+   "office300/lohnausweis_p0": {
+    "runs": [
+     2.239,
+     2.234,
+     2.424
+    ],
+    "median": 2.239
+   },
+   "office300/aktionaerbindungsvertrag_p0": {
+    "runs": [
+     4.448,
+     4.585,
+     4.485
+    ],
+    "median": 4.485
+   },
+   "office300/protokoll_gv_p0": {
+    "runs": [
+     2.203,
+     2.288,
+     2.214
+    ],
+    "median": 2.214
+   }
+  }
+ },
+ "tfast_psm3_nolines": {
+  "s_per_page_median": 2.409,
+  "s_per_page_mean": 2.754,
+  "system_busy": 0.258,
+  "pages": {
+   "office300/jahresrechnung_p0": {
+    "runs": [
+     2.148,
+     2.45,
+     2.185
+    ],
+    "median": 2.185
+   },
+   "office300/jahresrechnung_p1": {
+    "runs": [
+     1.994,
+     2.177,
+     2.084
+    ],
+    "median": 2.084
+   },
+   "office300/bankauszug_p0": {
+    "runs": [
+     2.959,
+     2.994,
+     3.101
+    ],
+    "median": 2.994
+   },
+   "office300/lohnausweis_p0": {
+    "runs": [
+     2.461,
+     2.296,
+     2.332
+    ],
+    "median": 2.332
+   },
+   "office300/aktionaerbindungsvertrag_p0": {
+    "runs": [
+     4.61,
+     4.444,
+     4.345
+    ],
+    "median": 4.444
+   },
+   "office300/protokoll_gv_p0": {
+    "runs": [
+     2.487,
+     2.544,
+     2.479
+    ],
+    "median": 2.487
+   }
+  }
+ },
+ "tapi_hybrid85": {
+  "s_per_page_median": 2.599,
+  "s_per_page_mean": 3.021,
+  "system_busy": 0.255,
+  "pages": {
+   "office300/jahresrechnung_p0": {
+    "runs": [
+     1.423,
+     1.289,
+     1.379
+    ],
+    "median": 1.379
+   },
+   "office300/jahresrechnung_p1": {
+    "runs": [
+     1.556,
+     1.772,
+     1.66
+    ],
+    "median": 1.66
+   },
+   "office300/bankauszug_p0": {
+    "runs": [
+     6.205,
+     6.265,
+     6.313
+    ],
+    "median": 6.265
+   },
+   "office300/lohnausweis_p0": {
+    "runs": [
+     3.738,
+     3.508,
+     3.666
+    ],
+    "median": 3.666
+   },
+   "office300/aktionaerbindungsvertrag_p0": {
+    "runs": [
+     3.473,
+     3.537,
+     3.548
+    ],
+    "median": 3.537
+   },
+   "office300/protokoll_gv_p0": {
+    "runs": [
+     1.538,
+     1.62,
+     1.671
+    ],
+    "median": 1.62
+   }
+  }
+ },
+ "tfast_psm4_400": {
+  "s_per_page_median": 3.277,
+  "s_per_page_mean": 3.546,
+  "system_busy": 0.258,
+  "pages": {
+   "office300/jahresrechnung_p0": {
+    "runs": [
+     2.491,
+     2.517,
+     2.563
+    ],
+    "median": 2.517
+   },
+   "office300/jahresrechnung_p1": {
+    "runs": [
+     2.894,
+     2.724,
+     2.48
+    ],
+    "median": 2.724
+   },
+   "office300/bankauszug_p0": {
+    "runs": [
+     3.634,
+     3.64,
+     3.699
+    ],
+    "median": 3.64
+   },
+   "office300/lohnausweis_p0": {
+    "runs": [
+     3.181,
+     3.164,
+     3.274
+    ],
+    "median": 3.181
+   },
+   "office300/aktionaerbindungsvertrag_p0": {
+    "runs": [
+     5.9,
+     5.837,
+     5.767
+    ],
+    "median": 5.837
+   },
+   "office300/protokoll_gv_p0": {
+    "runs": [
+     3.258,
+     3.374,
+     3.408
+    ],
+    "median": 3.374
+   }
+  }
+ },
+ "tbest_psm4_400": {
+  "s_per_page_median": 5.937,
+  "s_per_page_mean": 7.081,
+  "system_busy": 0.261,
+  "pages": {
+   "office300/jahresrechnung_p0": {
+    "runs": [
+     4.378,
+     4.276,
+     4.296
+    ],
+    "median": 4.296
+   },
+   "office300/jahresrechnung_p1": {
+    "runs": [
+     5.598,
+     5.437,
+     5.593
+    ],
+    "median": 5.593
+   },
+   "office300/bankauszug_p0": {
+    "runs": [
+     7.921,
+     7.75,
+     7.613
+    ],
+    "median": 7.75
+   },
+   "office300/lohnausweis_p0": {
+    "runs": [
+     6.15,
+     6.281,
+     6.286
+    ],
+    "median": 6.281
+   },
+   "office300/aktionaerbindungsvertrag_p0": {
+    "runs": [
+     12.971,
+     13.564,
+     12.98
+    ],
+    "median": 12.98
+   },
+   "office300/protokoll_gv_p0": {
+    "runs": [
+     5.566,
+     5.791,
+     5.584
+    ],
+    "median": 5.584
+   }
+  }
+ },
+ "rapidocr_bundled": {
+  "s_per_page_median": 6.3,
+  "s_per_page_mean": 7.414,
+  "system_busy": 0.268,
+  "pages": {
+   "office300/jahresrechnung_p0": {
+    "runs": [
+     5.515,
+     5.85,
+     5.926
+    ],
+    "median": 5.85
+   },
+   "office300/jahresrechnung_p1": {
+    "runs": [
+     6.991,
+     5.721,
+     5.618
+    ],
+    "median": 5.721
+   },
+   "office300/bankauszug_p0": {
+    "runs": [
+     9.589,
+     7.947,
+     8.165
+    ],
+    "median": 8.165
+   },
+   "office300/lohnausweis_p0": {
+    "runs": [
+     6.75,
+     6.105,
+     6.046
+    ],
+    "median": 6.105
+   },
+   "office300/aktionaerbindungsvertrag_p0": {
+    "runs": [
+     12.969,
+     11.587,
+     12.147
+    ],
+    "median": 12.147
+   },
+   "office300/protokoll_gv_p0": {
+    "runs": [
+     8.17,
+     6.494,
+     6.475
+    ],
+    "median": 6.494
+   }
+  }
+ }
+}

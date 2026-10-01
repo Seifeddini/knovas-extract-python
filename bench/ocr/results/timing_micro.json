@@ -1,0 +1,16 @@
+{
+ "render_300dpi_gray_s": 0.0224,
+ "render_400dpi_gray_s": 0.1427,
+ "encode_png_pymupdf_s": 1.3074,
+ "encode_pgm_s": 0.0014,
+ "deskew_estimate_s": 0.0483,
+ "sideways_check_s": 0.0132,
+ "spawn_and_model_load_fast_deu+eng_s": 0.1631,
+ "spawn_and_model_load_fast_deu+fra+eng_s": 0.2316,
+ "spawn_and_model_load_best_deu+eng_s": 0.2167,
+ "spawn_and_model_load_best_deu+fra+eng_s": 0.3106,
+ "tesserocr_init_fast_s": 0.142,
+ "tesserocr_init_best_s": 0.2,
+ "per_page_ocr_decision_digital_s": 0.0008,
+ "per_page_ocr_decision_scan_s": 0.0002
+}
