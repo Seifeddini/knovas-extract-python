@@ -146,3 +146,22 @@ model 41 pages/min. Single core on office scans: 2.2 s/page fast, ~3.5 s best. M
    `NOTICE`; install Tesseract in CI and run the `needs_tesseract` tests.
 5. DOCX tables rendered inline as rows (`docx_tables="inline"`), so table-only documents are not
    empty.
+
+## Implementation plan and obligations (2026-10-01)
+
+The implementation plan that follows from these findings lives in the components repository:
+`KnovasComponents/docs/superpowers/plans/2026-10-01-ocr-markdown-lite.md` (per-page OCR decision,
+bounded fail-soft scheduler, tesserocr/CLI/MuPDF backends, `text_mode="layout"` markdown-lite,
+RC page-break markers and partial/retry recording, Platform mirror, test gates, rollout).
+
+The library-side behaviour it relies on is pinned **before implementation** by red tests that are
+bound to Alloy mechanism predicates in `KnowledgeBase/knovas-software/models/alloy/mechanisms/client_pipeline.als`
+(`external_tests` in `models/alloy/ci/obligations.yaml`; invariants GI-EXTRACT-01/02/04):
+
+| Test file | Pins |
+|---|---|
+| `tests/unit/test_ocr_decision.py` | per-page OCR decision (`_ocr/decision.py`): usable text layer kept verbatim, raster pages behind a digital cover OCR'd, garbage layer never trusted, counts not text |
+| `tests/unit/test_ocr_scheduler.py` | `_ocr/pool.py::run_ocr_schedule`: attempts ≤ `max_ocr_pages`, no skip while budget remains, one failed page never stops the rest, partial result with counts, warnings carry no text |
+
+`bench/ocr/code/engines.py` now passes `timeout=OCR_SUBPROCESS_TIMEOUT_S` (120 s) to every Tesseract
+subprocess so a hung engine cannot block a nightly job until the job timeout.

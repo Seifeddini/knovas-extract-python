@@ -70,6 +70,9 @@ CONFIGS = {
 DEFAULT_PARAMS = {"preserve_interword_spaces": "1"}
 
 
+# A hung engine must not block a nightly job until the job timeout (critique 2026-10-01).
+OCR_SUBPROCESS_TIMEOUT_S = 120
+
 def M(*v):
     return pymupdf.Matrix(*v)
 
@@ -254,7 +257,7 @@ def tess_osd(arr, td, scale=0.5, env=None):
     t = time.perf_counter()
     small = cv2.resize(arr, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA) if scale != 1 else arr
     r = subprocess.run(["tesseract", "stdin", "stdout", "--dpi", str(int(300 * scale)), "--tessdata-dir", TESSDATA[td],
-                        "--psm", "0"], input=pgm_bytes(small), capture_output=True, env=env)
+                        "--psm", "0"], input=pgm_bytes(small), capture_output=True, env=env, timeout=OCR_SUBPROCESS_TIMEOUT_S)
     out = r.stdout.decode(errors="replace") + r.stderr.decode(errors="replace")
     rot, conf = 0, 0.0
     for line in out.splitlines():
@@ -290,7 +293,7 @@ def tess_cli(arr, spec, dpi, env):
            "--psm", str(spec["psm"])]
     for k, v in params.items():
         cmd += ["-c", f"{k}={v}"]
-    r = subprocess.run(cmd + ["tsv"], input=pgm_bytes(arr), capture_output=True, env=env)
+    r = subprocess.run(cmd + ["tsv"], input=pgm_bytes(arr), capture_output=True, env=env, timeout=OCR_SUBPROCESS_TIMEOUT_S)
     if r.returncode != 0:
         raise RuntimeError(r.stderr.decode()[:500])
     return r.stdout.decode("utf-8", errors="replace")
