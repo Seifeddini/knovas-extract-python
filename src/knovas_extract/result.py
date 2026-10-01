@@ -34,6 +34,16 @@ class Limits:
     `max_metadata_value_length` caps every gap-filled scalar in
     `Metadata.extra` after `_metadata.sanitize_scalar` runs.
     `max_xmp_bytes` bounds PDF XMP metadata before defusedxml parses it.
+
+    OCR budgets (PDF, see docs/ocr.md) are **fail-soft**: crossing them
+    never raises. `max_ocr_pages` caps the pages OCR'd per document and
+    `ocr_time_budget_seconds` stops scheduling further pages once spent —
+    the rest are counted in `pdf:ocr_pages_skipped`. `ocr_page_timeout_seconds`
+    turns one hung page into a failed page (hard for the CLI / process
+    pool, advisory for in-process engines). `max_ocr_workers` caps the
+    worker pool. `max_ocr_image_megapixels` is checked from the PDF's image
+    dictionaries BEFORE any render: a pixel-bomb page is skipped, never
+    decoded.
     """
 
     max_input_bytes: int = 100 * 1024 * 1024  # 100 MiB
@@ -46,6 +56,11 @@ class Limits:
     max_path_length: int = 4096  # Source.path length cap (POSIX PATH_MAX)
     max_metadata_value_length: int = 4096  # per-scalar cap in Metadata.extra
     max_xmp_bytes: int = 1_048_576  # 1 MiB cap on PDF XMP metadata before parse
+    max_ocr_pages: int = 500  # OCR'd pages per document (fail-soft: rest counted as skipped)
+    ocr_time_budget_seconds: float = 240.0  # stop SUBMITTING OCR pages after this (fail-soft)
+    ocr_page_timeout_seconds: float = 60.0  # one page's OCR wall clock; a timeout = failed page
+    max_ocr_workers: int = 8  # OCR worker pool cap
+    max_ocr_image_megapixels: int = 40  # pixel-bomb guard, checked before any render
 
 
 @dataclass(slots=True)

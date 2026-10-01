@@ -13,6 +13,7 @@ Public API:
         ResourceExhaustedError,
         DependencyMissingError,
         Limits,                  # per-call resource caps
+        OcrOptions,              # PDF OCR engine / dpi / pool / injected backend
     )
 
 Promises (asserted by CI; see SECURITY.md):
@@ -26,6 +27,7 @@ Spec conformance: this implementation pins clients/extraction/spec @ <pinned-sha
 
 from __future__ import annotations
 
+from knovas_extract._ocr.options import OcrOptions
 from knovas_extract._version import SPEC_VERSION, __version__
 from knovas_extract.dispatch import extract
 from knovas_extract.errors import (
@@ -53,6 +55,7 @@ __all__ = [
     "ExtractionResult",
     "Limits",
     "Metadata",
+    "OcrOptions",
     "Page",
     "ResourceExhaustedError",
     "SPEC_VERSION",

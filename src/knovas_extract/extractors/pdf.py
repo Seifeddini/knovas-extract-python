@@ -21,17 +21,24 @@ Security posture (see SECURITY.md):
 The extractor is intentionally text-focused. Images, forms, annotations, and
 embedded files are NOT extracted in v1; per-format metadata of interest is
 surfaced under `metadata.extra` with `pdf:` namespace.
+
+OCR (0.4.0, see docs/ocr.md): the decision is made PER PAGE
+(`_ocr.decision`): a usable text layer is kept verbatim, a raster page
+without one is an OCR candidate. Candidates go through the bounded,
+fail-soft scheduler (`_ocr.pipeline` / `_ocr.pool`); budgets in `Limits`
+are never raised, pages beyond them are counted. Born-digital PDFs produce
+exactly the same output as before.
 """
 
 from __future__ import annotations
 
 import contextlib
 import hashlib
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, ClassVar, Literal, cast
 
-UseOcrT = bool | Literal["auto"]
-DEFAULT_OCR_LANGUAGE = "deu+eng"
-
+from knovas_extract._ocr.decision import OcrDecision, page_needs_ocr
+from knovas_extract._ocr.options import OcrOptions
 from knovas_extract.dispatch import MIME_REGISTRY, make_result
 from knovas_extract.errors import (
     CorruptDocumentError,
@@ -42,6 +49,9 @@ from knovas_extract.errors import (
 from knovas_extract.interfaces import IExtractor
 from knovas_extract.normalize import canonicalize_text, word_count
 from knovas_extract.result import ExtractionResult, Limits, Metadata, Page
+
+UseOcrT = bool | Literal["auto"]
+DEFAULT_OCR_LANGUAGE = "deu+eng"
 
 # PyMuPDF `doc.permissions` bitmask flags. See pdfmark spec + PyMuPDF docs.
 _PDF_PERM_TOKENS = (
@@ -188,7 +198,7 @@ def _pdf_to_markdown(
     try:
         import pymupdf4llm
     except ImportError as exc:
-        raise DependencyMissingError("pdf", "pymupdf4llm") from exc
+        raise DependencyMissingError("pdf-markdown", "pymupdf4llm") from exc
 
     from knovas_extract._markdown import apply_url_allowlist, check_expansion
 
@@ -379,27 +389,24 @@ def _extract_structured_tables_from_pdf(doc: Any, warnings: list[str]) -> list[T
     return tables
 
 
-def _ocr_should_run(use_ocr: UseOcrT, *, has_text: bool) -> bool:
-    if use_ocr is False:
-        return False
-    if use_ocr is True:
-        return True
-    return not has_text
+@dataclass(slots=True)
+class _OcrSummary:
+    """What the per-page OCR pass reports (scalars only — GI-EXTRACT-04)."""
+
+    report: bool  # emit the pdf:ocr_* keys at all
+    ocr_pages: int = 0  # pages whose text came from OCR (attempted - failed)
+    text_pages: int = 0  # pages whose text layer was used as is (non-empty)
+    skipped: int = 0  # candidates never attempted (budget / pixel cap / no backend)
+    failed: int = 0
+    backend: str = "none"
+    backend_version: str | None = None
+    seconds: float | None = None
+    cpu_seconds: float | None = None
+    mean_conf: float | None = None
 
 
-def _page_text_via_ocr(page: Any, *, language: str) -> str:
-    """Extract page text via PyMuPDF + system Tesseract."""
-    try:
-        textpage = page.get_textpage_ocr(language=language)
-        return cast(str, page.get_text(textpage=textpage) or "")
-    except Exception as exc:
-        msg = str(exc).lower()
-        if "tesseract" in msg or "tessdata" in msg:
-            raise DependencyMissingError(
-                "pdf",
-                "tesseract-ocr (system package; install e.g. apt install tesseract-ocr tesseract-ocr-deu)",
-            ) from exc
-        raise CorruptDocumentError(f"PDF OCR failed: {exc}") from exc
+def _plural(n: int, noun: str) -> str:
+    return f"{n} {noun}" if n == 1 else f"{n} {noun}s"
 
 
 def _collect_page_texts(
@@ -408,13 +415,28 @@ def _collect_page_texts(
     limits: Limits,
     warnings: list[str],
     *,
-    ocr_language: str | None = None,
-) -> tuple[list[Page], list[str], int]:
-    """Return (pages, raw page text chunks, total UTF-8 bytes)."""
-    pages: list[Page] = []
-    text_chunks: list[str] = []
-    total_bytes = 0
-    use_ocr = ocr_language is not None
+    use_ocr: UseOcrT = "auto",
+    ocr: OcrOptions | None = None,
+    explicit_ocr: bool = False,
+) -> tuple[list[Page], list[str], int, _OcrSummary]:
+    """Return (pages, raw page text chunks, total UTF-8 bytes, OCR summary).
+
+    Per-page OCR decision (GI-EXTRACT-01, Alloy
+    ``PerPageOcrDecisionMechanism``): every page's text layer is read, the
+    decision is taken per page, the candidates are OCR'd through the
+    bounded fail-soft scheduler, and each page's text is assembled from
+    the layer (kept / discarded) and the OCR text (replacing / appended).
+
+    Fail-soft (decision D10): in ``use_ocr="auto"`` a missing OCR backend
+    leaves every candidate's text layer in place, adds one counted warning
+    and reports ``backend="none"``; `DependencyMissingError` propagates
+    only when an engine was forced (``OcrOptions.engine`` / ``use_ocr=True``)
+    or when the document would otherwise be completely empty.
+    """
+    options = ocr or OcrOptions()
+    layer_texts: dict[int, str] = {}
+    decisions: dict[int, OcrDecision] = {}
+    loaded: list[int] = []
 
     for i in range(page_count):
         try:
@@ -422,22 +444,88 @@ def _collect_page_texts(
         except Exception as exc:
             warnings.append(f"page {i}: could not load ({exc})")
             continue
-        if use_ocr:
-            page_text = _page_text_via_ocr(page, language=ocr_language or DEFAULT_OCR_LANGUAGE)
+        layer = cast(str, page.get_text("text") or "")
+        if not layer and i == 0:
+            warnings.append("first page produced no text (OCR may help for scanned PDFs)")
+        layer_texts[i] = layer
+        decisions[i] = page_needs_ocr(page, use_ocr, text=layer)
+        loaded.append(i)
+
+    candidates = [i for i in loaded if decisions[i].needs_ocr]
+    summary = _OcrSummary(report=explicit_ocr or bool(candidates) or use_ocr is True)
+    summary.text_pages = sum(
+        1 for i in loaded if not decisions[i].needs_ocr and layer_texts[i].strip()
+    )
+
+    doc_res = None
+    backend_missing = False
+    if candidates:
+        from knovas_extract._ocr.pipeline import run_document_ocr
+
+        try:
+            doc_res = run_document_ocr(
+                doc, candidates, options=options, limits=limits, language=options.language
+            )
+        except DependencyMissingError:
+            forced = options.engine != "auto" or use_ocr is True
+            kept_any = any(layer_texts[i].strip() for i in loaded if decisions[i].keep_text_layer)
+            if forced or not kept_any:
+                raise
+            backend_missing = True
+            warnings.append(
+                f"pdf: OCR backend unavailable; {_plural(len(candidates), 'page')} left without OCR"
+            )
+            summary.skipped = len(candidates)
+
+    if doc_res is not None:
+        run = doc_res.run
+        summary.ocr_pages = len(run.attempted) - len(run.failed)
+        summary.failed = len(run.failed)
+        summary.skipped = len(run.skipped) + len(doc_res.oversize)
+        summary.backend = doc_res.backend_name
+        summary.backend_version = doc_res.backend_version
+        summary.seconds = round(run.seconds, 3)
+        summary.cpu_seconds = round(run.cpu_seconds, 3)
+        summary.mean_conf = doc_res.mean_conf
+        if summary.ocr_pages:
+            warnings.append(
+                f"pdf: OCR applied to {summary.ocr_pages} of {page_count} pages via {summary.backend}"
+            )
+        if run.skipped:
+            warnings.append(
+                f"pdf: {_plural(len(run.skipped), 'page')} skipped: OCR budget exhausted"
+            )
+        if doc_res.oversize:
+            warnings.append(
+                f"pdf: {_plural(len(doc_res.oversize), 'page')} skipped: image exceeds max_ocr_image_megapixels"
+            )
+        if run.failed:
+            warnings.append(f"pdf: {_plural(len(run.failed), 'page')} failed OCR")
+
+    pages: list[Page] = []
+    text_chunks: list[str] = []
+    total_bytes = 0
+    for i in loaded:
+        decision = decisions[i]
+        layer = layer_texts[i]
+        if not decision.needs_ocr or backend_missing:
+            page_text = layer
         else:
-            page_text = cast(str, page.get_text("text") or "")
-            if not page_text and i == 0:
-                warnings.append(
-                    "first page produced no text (OCR may help for scanned PDFs)"
-                )
+            ocr_text = ""
+            if doc_res is not None and i in doc_res.results:
+                ocr_text = doc_res.results[i].text
+            if decision.keep_text_layer:
+                page_text = layer
+                if ocr_text.strip():
+                    page_text = f"{layer}\n\n{ocr_text}" if layer.strip() else ocr_text
+            else:
+                page_text = ocr_text
         pages.append(Page(index=i, text=canonicalize_text(page_text)))
         text_chunks.append(page_text)
         total_bytes += len(page_text.encode("utf-8"))
         if total_bytes > limits.max_text_bytes:
-            raise ResourceExhaustedError(
-                "text size", limits.max_text_bytes, observed=total_bytes
-            )
-    return pages, text_chunks, total_bytes
+            raise ResourceExhaustedError("text size", limits.max_text_bytes, observed=total_bytes)
+    return pages, text_chunks, total_bytes, summary
 
 
 def _open_doc(data: bytes) -> fitz.Document:
@@ -480,6 +568,7 @@ class PdfExtractor(IExtractor):
         emit_sentences: bool = False,
         use_ocr: UseOcrT = "auto",
         ocr_language: str = DEFAULT_OCR_LANGUAGE,
+        ocr: OcrOptions | None = None,
     ) -> ExtractionResult:
         from collections import Counter
 
@@ -492,30 +581,28 @@ class PdfExtractor(IExtractor):
         warnings: list[str] = []
         counts: Counter[str] = Counter()
         doc = _open_doc(data)
+        ocr_options = ocr if ocr is not None else OcrOptions(language=ocr_language)
 
         try:
             page_count = doc.page_count
             if page_count > limits.max_pages:
                 raise ResourceExhaustedError("page_count", limits.max_pages, observed=page_count)
 
-            pages, text_chunks, _total_bytes = _collect_page_texts(
-                doc, page_count, limits, warnings
+            pages, text_chunks, _total_bytes, ocr_summary = _collect_page_texts(
+                doc,
+                page_count,
+                limits,
+                warnings,
+                use_ocr=use_ocr,
+                ocr=ocr_options,
+                explicit_ocr=ocr is not None,
             )
             full_text = canonicalize_text("\n\n".join(text_chunks))
-            ocr_applied = False
-            if _ocr_should_run(use_ocr, has_text=bool(full_text.strip())):
+            ocr_applied = ocr_summary.ocr_pages > 0
+            if ocr_applied and emit_markdown:
                 warnings.append(
-                    f"pdf: no text layer detected; running Tesseract OCR ({ocr_language})"
+                    "pdf: content.markdown omitted for OCR output (no structure to preserve)"
                 )
-                pages, text_chunks, _total_bytes = _collect_page_texts(
-                    doc, page_count, limits, warnings, ocr_language=ocr_language
-                )
-                full_text = canonicalize_text("\n\n".join(text_chunks))
-                ocr_applied = True
-                if emit_markdown:
-                    warnings.append(
-                        "pdf: content.markdown omitted for OCR output (no structure to preserve)"
-                    )
 
             had_js = False
             # Doc-level JS check (cheap; runs once). Heuristic only; the
@@ -608,6 +695,25 @@ class PdfExtractor(IExtractor):
                 extra["pdf:outline_count"] = len(doc.get_toc())
             with contextlib.suppress(Exception):
                 extra["pdf:is_form_pdf"] = bool(doc.is_form_pdf)
+
+            # OCR scalars (GI-EXTRACT-04: counts and names, never text).
+            # Reported whenever OCR was configured explicitly or considered
+            # for at least one page — a born-digital PDF extracted with the
+            # defaults carries no OCR keys, so its output is unchanged.
+            if ocr_summary.report:
+                extra["pdf:ocr_pages"] = ocr_summary.ocr_pages
+                extra["pdf:text_pages"] = ocr_summary.text_pages
+                extra["pdf:ocr_pages_skipped"] = ocr_summary.skipped
+                extra["pdf:ocr_pages_failed"] = ocr_summary.failed
+                extra["pdf:ocr_backend"] = ocr_summary.backend
+                if ocr_summary.backend_version:
+                    extra["pdf:ocr_backend_version"] = ocr_summary.backend_version
+                if ocr_summary.seconds is not None:
+                    extra["pdf:ocr_seconds"] = ocr_summary.seconds
+                if ocr_summary.cpu_seconds is not None:
+                    extra["pdf:ocr_cpu_seconds"] = ocr_summary.cpu_seconds
+                if ocr_summary.mean_conf is not None:
+                    extra["pdf:ocr_mean_conf"] = ocr_summary.mean_conf
 
             finalize_warnings(counts, warnings)
 

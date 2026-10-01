@@ -7,7 +7,7 @@ build-backend = "hatchling.build"
 # ---------------------------------------------------------------------------
 [project]
 name = "knovas-extract"
-version = "0.3.0"
+version = "0.4.0a1"
 description = "Privacy-preserving, performant document extraction (text + metadata) for the Knovas Semantix platform. Python reference implementation."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -48,12 +48,37 @@ dependencies = [
 minimal = []
 
 # Format extras — opt-in per format.
-pdf  = ["pymupdf >= 1.24.0", "pymupdf4llm >= 0.0.17,< 1.28.1"]  # AGPL (via pymupdf)
+pdf  = ["pymupdf >= 1.24.0"]  # AGPL (via pymupdf)
 docx = ["python-docx >= 1.1.2", "mammoth >= 1.8.0"]
 msg  = ["extract-msg >= 0.48.0"]          # GPL
 html = ["selectolax >= 0.3.21"]
 rtf  = ["striprtf >= 0.0.27"]
 md   = ["python-frontmatter >= 1.1.0"]
+
+# PDF Markdown emission (`emit_markdown=True` on PDFs) — pymupdf4llm, now
+# SEPARATE from [pdf]: pymupdf4llm >= 1.27.2 hard-requires `pymupdf-layout`
+# (PolyForm Noncommercial 1.0.0 / Artifex commercial — NOT redistributable
+# in a commercial product) plus onnxruntime; the upper bound keeps it out.
+# `pymupdf4llm == 0.3.4` (the last pre-layout line) was considered as a pin
+# but its requires_dist is `pymupdf >= 1.27.1`, i.e. it cannot be used with
+# the `pymupdf >= 1.24.0` floor of [pdf]; the range below is kept instead.
+# CI asserts `pip show pymupdf-layout` FAILS after `pip install .[pdf]` and
+# `.[pdf,ocr]`. Scanned pages are never run through pymupdf4llm's own OCR.
+pdf-markdown = ["pymupdf4llm >= 0.0.17, < 1.27.2"]
+
+# Per-page OCR for scanned PDFs (`extract(..., ocr=OcrOptions(...))`, used by
+# default in use_ocr="auto" when a page carries a raster and no usable text
+# layer). tesserocr (MIT) ships manylinux wheels that bundle Tesseract +
+# Leptonica — no Windows wheels, macOS wheels only for recent targets, hence
+# the platform marker; without it the Tesseract CLI / MuPDF fallbacks are
+# used. Language data (tessdata) comes from the host (`tesseract-ocr-deu`
+# etc.). numpy + Pillow drive the render/autorotate/deskew/rule-filter
+# preprocessing. See docs/ocr.md.
+ocr = [
+  "tesserocr >= 2.11, < 3 ; sys_platform == 'linux'",
+  "numpy >= 1.26",
+  "pillow >= 10",
+]
 
 # Markdown emission (opt-in `extract(..., emit_markdown=True)`). Enables
 # sanitized HTML→Markdown conversion in the html/docx/eml/msg paths.
@@ -75,7 +100,7 @@ sentences = ["pysbd >= 0.3.4,<0.4"]
 
 # Convenience: everything (note licensing implications).
 all = [
-  "knovas-extract[pdf,docx,msg,html,rtf,md,markdown,sentences]",
+  "knovas-extract[pdf,pdf-markdown,ocr,docx,msg,html,rtf,md,markdown,sentences]",
 ]
 
 [project.urls]
@@ -131,7 +156,7 @@ test = "pytest {args:tests}"
 # introspect real types from the optional deps (python-docx, mammoth, fitz...).
 # Without this they fall back to advisory missing-import warnings only.
 [tool.hatch.envs.lint]
-features = ["pdf", "docx", "html", "rtf", "msg", "md", "markdown", "sentences"]
+features = ["pdf", "pdf-markdown", "docx", "html", "rtf", "msg", "md", "markdown", "sentences"]
 dependencies = [
   "ruff == 0.7.4",
   "mypy == 1.13.0",
@@ -163,7 +188,7 @@ all = ["run-bandit", "run-pip-audit"]
 # Requires the format extras so dispatch can actually invoke each extractor;
 # otherwise tests fail with DependencyMissingError instead of validating output.
 [tool.hatch.envs.golden]
-features = ["pdf", "docx", "html", "rtf", "msg", "md", "markdown", "sentences"]
+features = ["pdf", "pdf-markdown", "docx", "html", "rtf", "msg", "md", "markdown", "sentences"]
 dependencies = [
   "pytest >= 8.3",
   "pytest-socket >= 0.7.0",
@@ -176,7 +201,7 @@ run = "pytest tests/golden {args:-v}"
 
 # Property tests — hypothesis-driven robustness + leak detection.
 [tool.hatch.envs.property]
-features = ["pdf", "docx", "html", "rtf", "msg", "md", "markdown", "sentences"]
+features = ["pdf", "pdf-markdown", "docx", "html", "rtf", "msg", "md", "markdown", "sentences"]
 dependencies = [
   "pytest >= 8.3",
   "pytest-socket >= 0.7.0",
@@ -197,7 +222,7 @@ run = "pytest bench --benchmark-only --benchmark-json=.benchmarks/result.json {a
 
 # Fuzzing (atheris, Linux/macOS only).
 [tool.hatch.envs.fuzz]
-features = ["pdf", "docx", "html", "rtf", "msg", "md", "markdown", "sentences"]
+features = ["pdf", "pdf-markdown", "docx", "html", "rtf", "msg", "md", "markdown", "sentences"]
 dependencies = [
   "atheris >= 2.3.0 ; sys_platform != 'win32'",
 ]
@@ -270,6 +295,9 @@ module = [
   "mammoth", "mammoth.*",
   "defusedxml", "defusedxml.*",
   "pysbd", "pysbd.*",
+  "tesserocr", "tesserocr.*",
+  "numpy", "numpy.*",
+  "PIL", "PIL.*",
 ]
 ignore_missing_imports = true
 
@@ -307,6 +335,7 @@ markers = [
   "linux_only:   skipped on macOS / Windows",
   "needs_pymupdf: skipped unless [pdf] extra is installed",
   "needs_tesseract: skipped unless tesseract-ocr is installed on the host",
+  "needs_tesserocr: skipped unless the tesserocr wheel ([ocr] extra) is importable",
 ]
 filterwarnings = [
   "error",                                  # warnings are errors by default

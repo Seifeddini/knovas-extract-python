@@ -10,7 +10,7 @@ import argparse
 import json
 import sys
 
-from knovas_extract import extract
+from knovas_extract import OcrOptions, extract
 from knovas_extract.errors import ExtractError
 
 
@@ -36,7 +36,7 @@ def main(argv: list[str] | None = None) -> int:
         help=(
             "Populate content.markdown with sanitized Markdown output "
             "(requires the [markdown] extra for HTML-shaped inputs and "
-            "the [pdf] extra's pymupdf4llm for PDFs)."
+            "the [pdf-markdown] extra for PDFs)."
         ),
     )
     parser.add_argument(
@@ -48,7 +48,47 @@ def main(argv: list[str] | None = None) -> int:
             "Requires the [sentences] extra (pysbd)."
         ),
     )
+    parser.add_argument(
+        "--ocr-engine",
+        choices=["auto", "tesserocr", "cli", "mupdf"],
+        default=None,
+        help=(
+            "PDF OCR engine: auto (tesserocr, then the tesseract CLI, then MuPDF), "
+            "or force one. Scanned pages are OCR'd per page; born-digital pages are kept."
+        ),
+    )
+    parser.add_argument(
+        "--ocr-dpi",
+        type=int,
+        default=None,
+        help="Render resolution for OCR (default: native, capped at 300).",
+    )
+    parser.add_argument(
+        "--ocr-workers",
+        type=int,
+        default=None,
+        help="Parallel OCR workers (default: available CPUs - 1, capped by Limits).",
+    )
+    parser.add_argument(
+        "--ocr-psm",
+        type=int,
+        default=None,
+        help="Tesseract page segmentation mode (default 3).",
+    )
     args = parser.parse_args(argv)
+
+    ocr: OcrOptions | None = None
+    if any(v is not None for v in (args.ocr_engine, args.ocr_dpi, args.ocr_workers, args.ocr_psm)):
+        try:
+            ocr = OcrOptions(
+                engine=args.ocr_engine or "auto",
+                dpi=args.ocr_dpi,
+                workers=args.ocr_workers,
+                psm=args.ocr_psm if args.ocr_psm is not None else 3,
+            )
+        except ValueError as exc:
+            print(f"ValueError: {exc}", file=sys.stderr)
+            return 2
 
     try:
         result = extract(
@@ -56,6 +96,7 @@ def main(argv: list[str] | None = None) -> int:
             mime=args.mime,
             emit_markdown=args.emit_markdown,
             emit_sentences=args.emit_sentences,
+            ocr=ocr,
         )
     except ExtractError as exc:
         print(f"{type(exc).__name__}: {exc}", file=sys.stderr)

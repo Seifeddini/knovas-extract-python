@@ -26,6 +26,8 @@ That's the whole library. It does **not** chunk, embed, upload to Semantix, or t
 ```bash
 pip install knovas-extract                       # core only (TXT/MD/HTML/EML)
 pip install 'knovas-extract[pdf]'                # + PyMuPDF (AGPL — read NOTICE)
+pip install 'knovas-extract[pdf,ocr]'            # + per-page OCR for scanned PDFs (tesserocr, numpy, pillow)
+pip install 'knovas-extract[pdf-markdown]'       # + pymupdf4llm for emit_markdown=True on PDFs
 pip install 'knovas-extract[docx,msg,rtf]'       # + DOCX/MSG/RTF
 pip install 'knovas-extract[markdown]'           # + emit_markdown=True (sanitized MD)
 pip install 'knovas-extract[sentences]'          # + emit_sentences=True (pysbd, MIT)
@@ -60,7 +62,7 @@ result = extract(data, mime="application/pdf")
 
 ### Markdown output (opt-in, sanitized)
 
-Pass `emit_markdown=True` to populate `content.markdown` with a whole-document Markdown rendering. Requires the `[markdown]` extra (adds `markdownify`); PDFs additionally require `pymupdf4llm`, which ships in the `[pdf]` extra.
+Pass `emit_markdown=True` to populate `content.markdown` with a whole-document Markdown rendering. Requires the `[markdown]` extra (adds `markdownify`); PDFs additionally require `pymupdf4llm`, which ships in the separate `[pdf-markdown]` extra (pinned below the releases that pull in the non-commercial `pymupdf-layout` model).
 
 ```python
 result = extract("report.docx", emit_markdown=True)
@@ -108,6 +110,27 @@ For the full contract reference (including chunk-and-cite recipes and
 per-format fidelity), see [docs/citations.md](docs/citations.md). For a
 complete walked-through **example of what the library returns for a
 PDF**, see [docs/example-pdf-output.md](docs/example-pdf-output.md).
+
+### Scanned PDFs (OCR, per page)
+
+`use_ocr="auto"` (the default) decides **per page**: a page with a usable
+text layer is kept byte-for-byte, a page that carries a raster image and
+no usable text (a scan, a garbage scanner layer, a stamp) is OCR'd at its
+native resolution (≤ 300 dpi) through the first available engine —
+in-process `tesserocr`, the system `tesseract` CLI, or PyMuPDF's built-in
+OCR. Budgets in `Limits` (`max_ocr_pages`, `ocr_time_budget_seconds`, …)
+are fail-soft: the document succeeds, pages beyond a budget are counted
+in `pdf:ocr_pages_skipped`. Tune with `ocr=OcrOptions(...)`:
+
+```python
+from knovas_extract import extract, OcrOptions
+
+r = extract("scan.pdf", ocr=OcrOptions(engine="auto", workers=4))
+r.metadata.extra["pdf:ocr_pages"], r.metadata.extra["pdf:ocr_backend"]
+```
+
+Full reference (decision rules, backends, budgets, metadata keys, cache
+protocol): [docs/ocr.md](docs/ocr.md).
 
 ### Source path — where did this document come from?
 

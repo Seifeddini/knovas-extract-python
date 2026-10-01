@@ -4,6 +4,78 @@ All notable changes documented here. Format: [Keep a Changelog](https://keepacha
 
 A **major** version bump matches the major of `spec_version` it conforms to.
 
+## [0.4.0a1] — 2026-10-01 (alpha)
+
+### Changed — per-page OCR at native / 300 dpi (behaviour change for scanned PDFs)
+- **The OCR decision is made per page, not per document.** `use_ocr="auto"`
+  (the default) keeps every page with a usable text layer verbatim and OCRs
+  the pages that carry a raster image without one — a scanned body behind a
+  digital cover letter, a page whose MFP text layer is `(cid:…)` / U+FFFD
+  garbage (discarded), a scanner stamp over a scan (kept, OCR text appended —
+  a full-page raster (≥ 85 % cover) under a layer of < 200 chars is OCR'd
+  even when the stamp alone would count as usable text).
+  0.3.x decided once for the whole document and OCR'd nothing as soon as
+  one page had text (GI-EXTRACT-01; Alloy `PerPageOcrDecisionMechanism`).
+- **Scanned pages are rendered at their native resolution capped at 300 dpi**
+  (never upsampled) instead of PyMuPDF's 72-dpi partial OCR. Every scanned
+  PDF therefore produces different — far better — text than 0.3.x
+  (benchmark: CER 0.575 → ≤ 0.03, 15 % → ≥ 92 % of amounts exact); callers
+  that store extracted text should re-ingest scanned documents once.
+  **Born-digital PDFs are byte-identical to 0.3.0** (no new metadata keys,
+  no new warnings unless OCR was configured or considered).
+- The warning `pdf: no text layer detected; running Tesseract OCR (…)` is
+  replaced by exactly one `pdf: OCR applied to N of M pages via <backend>`.
+- `pymupdf4llm` import failures now point at the `[pdf-markdown]` extra.
+
+### Added — OCR engines, budgets, options (`docs/ocr.md`)
+- **`extract(..., ocr=OcrOptions(...))`** and `--ocr-engine/--ocr-dpi/
+  --ocr-workers/--ocr-psm` on the CLI. Engines: `tesserocr` (in-process,
+  thread-local, `OMP_THREAD_LIMIT=1`), `cli` (system `tesseract`, PGM on
+  stdin, TSV out, minimal env, no shell, hard timeout), `mupdf`
+  (`get_textpage_ocr(dpi=300, full=True)`); `auto` picks the first
+  available in that order. Injected `backend=` / `cache=` implementations of
+  the new `IOcrBackend` / `IOcrCache` protocols (`knovas_extract.interfaces`).
+- **Preprocessing** (numpy + Pillow): autorotation (ink-variance sideways
+  check + OSD), ±3° deskew, ruling-line / dot-leader detection with
+  rule-word filtering, one psm-4 retry; never PNG, never temp files.
+- **Fail-soft budgets in `Limits`**: `max_ocr_pages` (500),
+  `ocr_time_budget_seconds` (240), `ocr_page_timeout_seconds` (60),
+  `max_ocr_workers` (8), `max_ocr_image_megapixels` (40, checked before any
+  render). Crossing one never raises: the document succeeds, the rest is
+  counted (`pdf:ocr_pages_skipped` / `pdf:ocr_pages_failed`; Alloy
+  `BoundedOcrMechanism`, `NoSpuriousSkipMechanism`, `FailSoftMechanism`).
+  A missing engine in `auto` mode keeps the text layers with one counted
+  warning and `pdf:ocr_backend="none"`; `DependencyMissingError` only for a
+  forced engine or a document that would otherwise be empty.
+- **Metadata scalars** `pdf:ocr_pages`, `pdf:text_pages`,
+  `pdf:ocr_pages_skipped`, `pdf:ocr_pages_failed`, `pdf:ocr_backend`,
+  `pdf:ocr_backend_version`, `pdf:ocr_seconds`, `pdf:ocr_cpu_seconds`,
+  `pdf:ocr_mean_conf` (`spec_version` unchanged, 1.3.0).
+- Optional thread (default) or forkserver **process pool**
+  (`OcrOptions(pool="process")`).
+
+### Packaging
+- **`[pdf]` no longer installs `pymupdf4llm`.** PDF Markdown emission moved
+  to the new **`[pdf-markdown]`** extra, pinned `pymupdf4llm < 1.27.2`:
+  from 1.27.2 it hard-requires `pymupdf-layout` (PolyForm Noncommercial).
+  CI asserts `pip show pymupdf-layout` fails after `pip install .[pdf]` and
+  `.[pdf,ocr]`. (`pymupdf4llm == 0.3.4` was evaluated as a pin and rejected:
+  its `requires_dist` is `pymupdf >= 1.27.1`, incompatible with the
+  `pymupdf >= 1.24.0` floor.)
+- New **`[ocr]`** extra: `tesserocr >= 2.11, < 3` (Linux only — no Windows
+  wheels), `numpy >= 1.26`, `pillow >= 10`. New CI job `ocr-ubuntu` installs
+  Tesseract + `deu`/`eng` packs and runs the live `needs_tesseract` /
+  `needs_tesserocr` tests. NOTICE lists Tesseract (Apache-2.0), Leptonica
+  (BSD-2), tesserocr (MIT, vendors libjpeg/libpng/libtiff/libwebp/openjpeg/
+  zlib), tessdata (Apache-2.0).
+
+### Security
+- OCR never writes temporary files (PGM over stdin / `SetImageBytes`), the
+  Tesseract child's stderr is discarded, its environment is minimal
+  (`OMP_THREAD_LIMIT`, `PATH`, `TESSDATA_PREFIX` when set), no shell;
+  warnings and metadata carry counts, never page text; oversize images are
+  rejected from the image dictionary before decoding. See SECURITY.md.
+
 ## [Unreleased]
 
 ### Added — PDF OCR for scanned documents (0.3.0)

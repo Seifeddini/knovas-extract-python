@@ -4,7 +4,7 @@
 
 - Spec: `spec_version = 1.1.0` (see `SPEC_VERSION` in `knovas_extract._version`).
 - Scope: **whole-document only**. Per-page granularity stays in `content.pages[*].text`. See "Design decisions" below for why.
-- Requires: the `[markdown]` extra (adds `markdownify`) for HTML-shaped inputs (HTML, DOCX, EML HTML alternative, MSG HTML body); PDF additionally requires `pymupdf4llm`, which ships in the `[pdf]` extra.
+- Requires: the `[markdown]` extra (adds `markdownify`) for HTML-shaped inputs (HTML, DOCX, EML HTML alternative, MSG HTML body); PDF additionally requires `pymupdf4llm`, which ships in the separate `[pdf-markdown]` extra (pinned `< 1.27.2` to keep the PolyForm-Noncommercial `pymupdf-layout` model out).
 
 ## Per-format fidelity
 

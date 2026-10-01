@@ -127,6 +127,26 @@ class TestDecidePage:
         d = decide_page("Scan 12.03.2024", image_cover=0.95, use_ocr="auto")
         assert d.needs_ocr is True and d.keep_text_layer is True
 
+    def test_scanner_stamp_that_looks_usable_over_full_page_raster_is_ocrd_and_kept(self):
+        """A full-page raster (>= 85 % cover) is a scan whatever stamp sits
+        on it: 'Gescannt am 12.03.2024 14:33 Seite 2 von 12' has >= 2
+        alphabetic tokens and >= 20 chars, yet the page is OCR'd and the
+        stamp kept."""
+        from knovas_extract._ocr.decision import decide_page
+
+        d = decide_page(
+            "Gescannt am 12.03.2024 14:33 Seite 2 von 12", image_cover=0.98, use_ocr="auto"
+        )
+        assert d.needs_ocr is True and d.keep_text_layer is True
+
+    def test_same_stamp_over_a_partial_image_is_a_usable_layer(self):
+        from knovas_extract._ocr.decision import decide_page
+
+        d = decide_page(
+            "Gescannt am 12.03.2024 14:33 Seite 2 von 12", image_cover=0.6, use_ocr="auto"
+        )
+        assert d.needs_ocr is False and d.keep_text_layer is True
+
 
 class TestTextLayerIsGarbage:
     def test_cid_soup(self):
@@ -173,6 +193,32 @@ class TestPerPageOcrDecisionMechanism:
         assert r.content.pages is not None
         assert "Begleitschreiben" in r.content.pages[0].text
         assert "OCR-TEXT" in r.content.pages[1].text
+
+    def test_full_page_scan_behind_scanner_stamp_is_ocrd(self):
+        """Page 1 a digital letter, page 2 a full-page raster carrying the
+        scanner's text stamp. The stamp passes the usable-text test on its
+        own; the page is still OCR'd, the stamp kept, the OCR text appended."""
+        backend = FakeOcrBackend()
+        data = _pdf(
+            [
+                {"text": "Sehr geehrte Damen und Herren, anbei der Jahresabschluss 2023."},
+                {
+                    "text": "Gescannt am 12.03.2024 14:33 Seite 2 von 12",
+                    "image": "Bilanz per 31.12.2023",
+                    "image_frac": 1.0,
+                    "text_pos": (72, 820),
+                },
+            ]
+        )
+        r = _extract_with(data, backend)
+        assert backend.calls == [1]
+        assert r.metadata.extra["pdf:ocr_pages"] == 1
+        assert r.metadata.extra["pdf:text_pages"] == 1
+        assert r.content.pages is not None
+        assert "Sehr geehrte" in r.content.pages[0].text
+        assert "Gescannt am 12.03.2024" in r.content.pages[1].text
+        assert "OCR-TEXT" in r.content.pages[1].text
+        assert r.content.pages[1].text.index("Gescannt") < r.content.pages[1].text.index("OCR-TEXT")
 
     def test_usable_text_layer_is_kept_verbatim_even_with_large_image(self):
         """A title page with a 60% logo/scan image keeps its text layer and

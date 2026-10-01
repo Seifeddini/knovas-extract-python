@@ -120,6 +120,78 @@ jobs:
       - name: Property tests
         run: hatch -e property run run
 
+      # Packaging guard (decision D16): `[pdf]` and `[pdf,ocr]` must never pull
+      # in `pymupdf-layout` (PolyForm Noncommercial, dragged in by pymupdf4llm
+      # >= 1.27.2). Fresh venv so the hatch envs stay untouched; Linux only
+      # because the tesserocr wheel in `[ocr]` carries a linux platform marker.
+      - name: "Packaging: [pdf] and [pdf,ocr] must not install pymupdf-layout"
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          python -m venv .pkgcheck
+          .pkgcheck/bin/pip install -q --upgrade pip
+          .pkgcheck/bin/pip install -q ".[pdf]"
+          if .pkgcheck/bin/pip show pymupdf-layout > /dev/null 2>&1; then
+            echo "::error::[pdf] installed pymupdf-layout"; exit 1; fi
+          .pkgcheck/bin/pip install -q --only-binary tesserocr ".[pdf,ocr]"
+          if .pkgcheck/bin/pip show pymupdf-layout > /dev/null 2>&1; then
+            echo "::error::[pdf,ocr] installed pymupdf-layout"; exit 1; fi
+          echo "pymupdf-layout absent after [pdf] and [pdf,ocr]"
+
+  # ---------------------------------------------------------------------------
+  # Live OCR on ubuntu only (decision D16): Tesseract + language packs from
+  # apt, the tesserocr wheel from the [ocr] extra. Runs the needs_tesseract /
+  # needs_tesserocr tests and the OCR unit files; the 3x3 matrix above stays
+  # Tesseract-free.
+  # ---------------------------------------------------------------------------
+  ocr-ubuntu:
+    name: OCR (tesseract + tesserocr, ubuntu)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: step-security/harden-runner@v2
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+      - name: Install Tesseract + language packs
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            tesseract-ocr tesseract-ocr-deu tesseract-ocr-eng libmagic1
+          tesseract --version | head -1
+          tesseract --list-langs
+      - name: Install project with [pdf,ocr]
+        run: |
+          pip install --upgrade pip
+          pip install --only-binary tesserocr ".[pdf,ocr]" "pytest>=8.3" "pytest-socket>=0.7.0" "hypothesis>=6.115"
+          if pip show pymupdf-layout > /dev/null 2>&1; then
+            echo "::error::[pdf,ocr] installed pymupdf-layout"; exit 1; fi
+      - name: Backend selection picks tesserocr
+        env:
+          OMP_THREAD_LIMIT: "1"
+        run: |
+          python - <<'PY'
+          import os
+          from knovas_extract._ocr.backend import select_backend
+          b = select_backend("auto", language="deu+eng")
+          print("backend:", b.name, getattr(b, "version", "?"), "tessdata:", getattr(b, "tessdata_dir", "?"))
+          assert b.name == "tesserocr", b.name
+          assert os.environ["OMP_THREAD_LIMIT"] == "1"
+          PY
+      # pytest-xdist is not a dev dependency of this project, so the live
+      # tests run single-process (they take well under a minute).
+      - name: OCR tests (live + unit)
+        run: |
+          pytest tests/unit/test_ocr_decision.py tests/unit/test_ocr_scheduler.py \
+                 tests/unit/test_ocr_backend.py tests/unit/test_ocr_preprocess.py -v
+          pytest tests -m "needs_tesseract or needs_tesserocr" -v
+
   # ---------------------------------------------------------------------------
   # Security gates. Required green to merge.
   # ---------------------------------------------------------------------------

@@ -19,8 +19,9 @@ import contextlib
 import hashlib
 import os
 from pathlib import Path
-from typing import Literal, Union
+from typing import Any, Literal, Union
 
+from knovas_extract._ocr.options import OcrOptions
 from knovas_extract._version import SPEC_VERSION as _SPEC_VERSION
 from knovas_extract._version import __version__ as _PACKAGE_VERSION
 from knovas_extract.errors import (
@@ -225,7 +226,7 @@ def _get_extractor(mime: str) -> IExtractor:
             extra_map = {
                 "fitz": "pdf",
                 "pymupdf": "pdf",
-                "pymupdf4llm": "pdf",
+                "pymupdf4llm": "pdf-markdown",
                 "docx": "docx",
                 "mammoth": "docx",
                 "extract_msg": "msg",
@@ -252,6 +253,7 @@ def extract(
     path: str | None = None,
     use_ocr: UseOcrT = "auto",
     ocr_language: str = DEFAULT_OCR_LANGUAGE,
+    ocr: OcrOptions | None = None,
 ) -> ExtractionResult:
     """Extract text + metadata from a document.
 
@@ -277,12 +279,24 @@ def extract(
             Validated by `_paths.validate_source_path` — rejects NUL, ASCII
             control chars, Unicode bidi-override chars (Trojan Source),
             and lengths over ``Limits.max_path_length``.
-        use_ocr: PDF-only. ``"auto"`` (default) runs Tesseract OCR via
-            PyMuPDF when the text layer is empty; ``False`` disables OCR;
-            ``True`` forces OCR even when a text layer exists.
-        ocr_language: Tesseract language pack string passed to PyMuPDF
-            (default ``deu+eng``). Requires matching system ``tesseract-ocr-*``
-            packages.
+        use_ocr: PDF-only. ``"auto"`` (default) decides **per page**: a
+            page with a usable text layer is kept verbatim, a page carrying
+            a raster image without one (scanned page, garbage scanner
+            layer, short stamp) is OCR'd. ``False`` disables OCR;
+            ``True`` OCRs every page that carries an image. A missing OCR
+            engine is fail-soft in ``"auto"`` (text layer kept, one counted
+            warning, ``pdf:ocr_backend = "none"``) unless the document would
+            otherwise be empty. See docs/ocr.md.
+        ocr_language: Tesseract language pack string (default ``deu+eng``).
+            Requires matching language packs for the chosen engine.
+            Overridden by ``ocr.language`` when ``ocr`` is given.
+        ocr: PDF-only `OcrOptions` — engine selection (``auto`` →
+            tesserocr → tesseract CLI → MuPDF), dpi, psm, worker pool, an
+            injected backend / cache. ``None`` uses the defaults. Budgets
+            live in `Limits` (``max_ocr_pages``, ``ocr_time_budget_seconds``,
+            ``ocr_page_timeout_seconds``, ``max_ocr_workers``,
+            ``max_ocr_image_megapixels``) and are fail-soft: pages beyond a
+            budget are counted (``pdf:ocr_pages_skipped``), never raised.
 
     Returns:
         ExtractionResult — guaranteed to validate against spec/schema.json.
@@ -305,7 +319,7 @@ def extract(
     # the backend isn't installed at call time, an ImportError escapes the
     # extractor and would break the contract — re-frame as DependencyMissingError.
     try:
-        extract_kwargs: dict[str, object] = {
+        extract_kwargs: dict[str, Any] = {
             "filename": filename,
             "limits": limits,
             "emit_markdown": emit_markdown,
@@ -314,13 +328,14 @@ def extract(
         if detected_mime == "application/pdf":
             extract_kwargs["use_ocr"] = use_ocr
             extract_kwargs["ocr_language"] = ocr_language
+            extract_kwargs["ocr"] = ocr
         result = extractor.extract(data, **extract_kwargs)
     except ImportError as exc:
         missing = getattr(exc, "name", "unknown")
         extra_map = {
             "fitz": "pdf",
             "pymupdf": "pdf",
-            "pymupdf4llm": "pdf",
+            "pymupdf4llm": "pdf-markdown",
             "docx": "docx",
             "mammoth": "docx",
             "extract_msg": "msg",
@@ -329,6 +344,9 @@ def extract(
             "frontmatter": "md",
             "markdownify": "markdown",
             "pysbd": "sentences",
+            "tesserocr": "ocr",
+            "numpy": "ocr",
+            "PIL": "ocr",
         }
         extra = extra_map.get(missing, detected_mime.split("/")[-1])
         raise DependencyMissingError(extra, missing) from exc
