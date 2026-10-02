@@ -75,6 +75,17 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="Tesseract page segmentation mode (default 3).",
     )
+    parser.add_argument(
+        "--text-mode",
+        choices=["plain", "layout"],
+        default="plain",
+        help=(
+            "PDF page text rendering: plain (default) or layout (markdown-lite: "
+            "'#' headings, one ' | ' row per table line, 'Key: value' forms; "
+            "unstructured pages stay byte-identical to plain). Other formats "
+            "emit plain text with a warning."
+        ),
+    )
     args = parser.parse_args(argv)
 
     ocr: OcrOptions | None = None
@@ -97,6 +108,7 @@ def main(argv: list[str] | None = None) -> int:
             emit_markdown=args.emit_markdown,
             emit_sentences=args.emit_sentences,
             ocr=ocr,
+            text_mode=args.text_mode,
         )
     except ExtractError as exc:
         print(f"{type(exc).__name__}: {exc}", file=sys.stderr)

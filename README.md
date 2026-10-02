@@ -132,6 +132,24 @@ r.metadata.extra["pdf:ocr_pages"], r.metadata.extra["pdf:ocr_backend"]
 Full reference (decision rules, backends, budgets, metadata keys, cache
 protocol): [docs/ocr.md](docs/ocr.md).
 
+### Layout text mode (markdown-lite tables, PDF)
+
+`text_mode="layout"` renders every PDF page from its word boxes — the text
+layer or the OCR words — into *markdown-lite* as `Page.text` itself: `#`
+headings, one ` | ` row per table line with compact fold keys
+(`Flüssige Mittel | 2023: 1'234'567.80 | 2022: 987'654.30`), `Key: value`
+forms, `- ` lists. A page without detected structure is **byte-identical to
+plain mode**, so prose corpora are unaffected. `content.sections` carries the
+headings; `metadata.extra` gains `pdf:text_mode`, `pdf:structured_pages`,
+`pdf:layout_tables`. Opt-in; PDF only (other formats emit plain text with a
+warning). CLI: `--text-mode layout`.
+
+```python
+r = extract("bilanz.pdf", text_mode="layout", emit_sentences=True)
+```
+
+Grammar, rules and measured numbers: [docs/layout-text-mode.md](docs/layout-text-mode.md).
+
 ### Source path — where did this document come from?
 
 Pass `path=` (or use a path-like input) and it flows to `Source.path`

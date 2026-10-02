@@ -16,6 +16,18 @@ import pytest
 SPEC_ENV = "KNOVAS_EXTRACT_SPEC_DIR"
 
 
+def pytest_addoption(parser: pytest.Parser) -> None:
+    """``--update-golden`` rewrites the committed layout renderings and the measured
+    baseline (`tests/golden/test_layout_golden.py`; `KNOVAS_LAYOUT_UPDATE_GOLDEN=1`
+    is honoured too)."""
+    parser.addoption(
+        "--update-golden",
+        action="store_true",
+        default=False,
+        help="rewrite golden-layout expected outputs and baseline.yaml",
+    )
+
+
 @pytest.fixture(scope="session")
 def spec_dir() -> Path:
     """Locate the knovas-extract-spec repo (or its checkout).

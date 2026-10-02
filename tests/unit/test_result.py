@@ -26,7 +26,16 @@ def sample_result() -> ExtractionResult:
             filename="x.txt",
         ),
         metadata=Metadata(
-            title="t", author="a", word_count=7, extra={"txt:charset_detected": "utf-8"}
+            title="t",
+            author="a",
+            word_count=7,
+            extra={
+                "txt:charset_detected": "utf-8",
+                # layout-mode scalars (0.4.0): strings / ints only, schema unchanged
+                "pdf:text_mode": "layout",
+                "pdf:structured_pages": 1,
+                "pdf:layout_tables": 1,
+            },
         ),
         content=Content(
             text="hello world\n\nsecond paragraph",

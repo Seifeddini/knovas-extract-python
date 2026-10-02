@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import Any, Literal, Union
 
 from knovas_extract._ocr.options import OcrOptions
+from knovas_extract._pdf_layout import TextModeT, validate_text_mode
 from knovas_extract._version import SPEC_VERSION as _SPEC_VERSION
 from knovas_extract._version import __version__ as _PACKAGE_VERSION
 from knovas_extract.errors import (
@@ -254,6 +255,7 @@ def extract(
     use_ocr: UseOcrT = "auto",
     ocr_language: str = DEFAULT_OCR_LANGUAGE,
     ocr: OcrOptions | None = None,
+    text_mode: TextModeT = "plain",
 ) -> ExtractionResult:
     """Extract text + metadata from a document.
 
@@ -297,17 +299,31 @@ def extract(
             ``ocr_page_timeout_seconds``, ``max_ocr_workers``,
             ``max_ocr_image_megapixels``) and are fail-soft: pages beyond a
             budget are counted (``pdf:ocr_pages_skipped``), never raised.
+        text_mode: ``"plain"`` (default) or ``"layout"``. PDF only. In
+            layout mode every page is rendered from its word boxes into
+            *markdown-lite* (``#`` headings, one `` | `` row per table line
+            with compact fold keys, ``Key: value`` forms, ``- `` lists) as
+            `Page.text` itself; a page without detected structure is
+            byte-identical to plain mode (GI-EXTRACT-03). `content.sections`
+            carries the emitted headings; `metadata.extra` gains
+            ``pdf:text_mode``, ``pdf:structured_pages``, ``pdf:layout_tables``.
+            For every other format the value is accepted, the plain text is
+            emitted unchanged and one warning says so (DOCX layout mode is a
+            later milestone). An unknown value raises `ValueError`. See
+            docs/layout-text-mode.md.
 
     Returns:
         ExtractionResult — guaranteed to validate against spec/schema.json.
 
     Raises:
         UnsupportedFormatError, CorruptDocumentError, EncryptedDocumentError,
-        ResourceExhaustedError, DependencyMissingError, ValueError (path).
+        ResourceExhaustedError, DependencyMissingError, ValueError (path,
+        text_mode).
     """
     from knovas_extract._paths import validate_source_path
 
     limits = limits or Limits()
+    mode = validate_text_mode(text_mode)
     data, filename, argv_path = _read_input(input, limits)
     resolved_path = validate_source_path(path if path is not None else argv_path, limits)
 
@@ -329,6 +345,7 @@ def extract(
             extract_kwargs["use_ocr"] = use_ocr
             extract_kwargs["ocr_language"] = ocr_language
             extract_kwargs["ocr"] = ocr
+            extract_kwargs["text_mode"] = mode
         result = extractor.extract(data, **extract_kwargs)
     except ImportError as exc:
         missing = getattr(exc, "name", "unknown")
@@ -374,6 +391,13 @@ def extract(
             version=_PACKAGE_VERSION,
         ),
     )
+
+    # text_mode is a PDF feature in 0.4.0: every other extractor runs in plain
+    # mode and the caller is told once (counts, no content — GI-EXTRACT-04).
+    if mode != "plain" and detected_mime != "application/pdf":
+        result.warnings.append(
+            f"text_mode={mode!r} is implemented for PDF only; plain text emitted"
+        )
 
     # Defense-in-depth: if an extractor populated `content.markdown` on the
     # emit_markdown path, run a final URL-scheme scrub on it. Catches

@@ -37,6 +37,8 @@ def main() -> None:
             extract(data, mime="application/pdf", limits=LIMITS)
         with contextlib.suppress(ExtractError):
             extract(data, mime="application/pdf", limits=LIMITS, emit_markdown=True)
+        with contextlib.suppress(ExtractError):
+            extract(data, mime="application/pdf", limits=LIMITS, text_mode="layout", use_ocr=False)
 
     atheris.Setup(sys.argv, TestOneInput)
     atheris.Fuzz()

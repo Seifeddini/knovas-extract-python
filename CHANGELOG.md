@@ -27,6 +27,35 @@ A **major** version bump matches the major of `spec_version` it conforms to.
   replaced by exactly one `pdf: OCR applied to N of M pages via <backend>`.
 - `pymupdf4llm` import failures now point at the `[pdf-markdown]` extra.
 
+### Added — layout text mode (`text_mode="layout"`, `docs/layout-text-mode.md`)
+- **`extract(..., text_mode="layout")`** and `--text-mode layout` on the CLI
+  (PDF only; opt-in, `"plain"` stays the default). Every page is rendered
+  from its word boxes — the born-digital text layer through the same PyMuPDF
+  text page that produces the plain text, or the OCR words of a scanned
+  page — into *markdown-lite* as `Page.text` itself: `#` headings (level
+  ≤ 4, blank line after each), one ` | ` row per table line with compact
+  fold keys for numeric cells (`2023: 1'234.00`), the header repeated on top
+  of every ≤ 150-token pack, `Key: value` forms, `- ` lists. The library
+  never emits `\f`.
+- **GI-EXTRACT-03**: a page without detected structure (no table region, no
+  key-value block, no OCR prose gutter) is emitted **byte-identical to plain
+  mode**; the 20-document synthetic law-firm gate
+  (`tests/golden/test_prose_regression.py`, one- and two-column contracts)
+  pins it. `content.text`, `pages`, `sentences` and every consumer contract
+  are unchanged in shape; `content.sections` is populated from the emitted
+  headings (page-relative lines mapped through `Page.line_start`).
+- Metadata scalars `pdf:text_mode`, `pdf:structured_pages`,
+  `pdf:layout_tables` (layout mode only; `spec_version` unchanged, 1.3.0).
+  `metadata.word_count` is computed on the markup-stripped text so it
+  matches plain mode on unstructured documents.
+- A kept scanner-stamp text layer over an OCR'd page leads the page as a
+  paragraph above the OCR layout. Layout failures are fail-soft per page
+  (plain text, counted warning). Other formats accept the kwarg, emit plain
+  text and warn once (`text_mode='layout' is implemented for PDF only`).
+- New `src/knovas_extract/_layout/` (pure-Python renderer, golden fixtures
+  under `tests/fixtures/treuhand/`) and `_pdf_layout.py` (wiring);
+  `pytest --update-golden` rewrites the golden-layout expectations.
+
 ### Added — OCR engines, budgets, options (`docs/ocr.md`)
 - **`extract(..., ocr=OcrOptions(...))`** and `--ocr-engine/--ocr-dpi/
   --ocr-workers/--ocr-psm` on the CLI. Engines: `tesserocr` (in-process,

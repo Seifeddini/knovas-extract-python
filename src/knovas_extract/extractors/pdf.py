@@ -28,6 +28,13 @@ without one is an OCR candidate. Candidates go through the bounded,
 fail-soft scheduler (`_ocr.pipeline` / `_ocr.pool`); budgets in `Limits`
 are never raised, pages beyond them are counted. Born-digital PDFs produce
 exactly the same output as before.
+
+Layout mode (`text_mode="layout"`, see docs/layout-text-mode.md): every
+page's word boxes — the born-digital text layer read through the SAME
+PyMuPDF text page that produced the plain text, or the OCR words of a
+scanned page — are rendered into markdown-lite by `_layout` and that
+rendering becomes `Page.text`. An unstructured page is byte-identical to
+plain mode (GI-EXTRACT-03). `_pdf_layout` holds the wiring.
 """
 
 from __future__ import annotations
@@ -39,6 +46,14 @@ from typing import TYPE_CHECKING, Any, ClassVar, Literal, cast
 
 from knovas_extract._ocr.decision import OcrDecision, page_needs_ocr
 from knovas_extract._ocr.options import OcrOptions
+from knovas_extract._pdf_layout import (
+    LayoutPageInput,
+    LayoutPageOutput,
+    TextModeT,
+    layout_words_from_ocr,
+    render_layout_pages,
+    validate_text_mode,
+)
 from knovas_extract.dispatch import MIME_REGISTRY, make_result
 from knovas_extract.errors import (
     CorruptDocumentError,
@@ -48,7 +63,7 @@ from knovas_extract.errors import (
 )
 from knovas_extract.interfaces import IExtractor
 from knovas_extract.normalize import canonicalize_text, word_count
-from knovas_extract.result import ExtractionResult, Limits, Metadata, Page
+from knovas_extract.result import ExtractionResult, Limits, Metadata, Page, Section
 
 UseOcrT = bool | Literal["auto"]
 DEFAULT_OCR_LANGUAGE = "deu+eng"
@@ -138,6 +153,8 @@ def _parse_xmp(xmp: str, limits: Limits, warnings: list[str]) -> dict[str, str]:
 
 if TYPE_CHECKING:
     import fitz
+
+    from knovas_extract._layout import Rule, Word
 
     from ..result import Table
 
@@ -409,6 +426,34 @@ def _plural(n: int, noun: str) -> str:
     return f"{n} {noun}" if n == 1 else f"{n} {noun}s"
 
 
+def _read_page_for_layout(page: Any) -> tuple[str, list[Word], list[Rule], bool]:
+    """Plain text and layout words of a born-digital page from ONE PyMuPDF text
+    page (``TEXTFLAGS_TEXT`` — the flags ``page.get_text("text")`` uses, so the
+    text is byte-identical to plain mode and the word set is the text's), plus
+    the vector rulings. Returns ``(text, words, rules, ok)``; a failure on the
+    layout side leaves the page without words (it renders as passthrough).
+    """
+    import fitz  # local import — keeps top-level startup cost flat
+
+    tp = page.get_textpage(flags=fitz.TEXTFLAGS_TEXT)
+    layer = cast(str, page.get_text("text", textpage=tp) or "")
+    words: list[Word] = []
+    rules: list[Rule] = []
+    ok = True
+    if layer.strip():
+        from knovas_extract._layout import words_from_fitz_page
+
+        try:
+            words = words_from_fitz_page(page, tp)
+        except Exception:
+            words, ok = [], False
+    from knovas_extract._layout import vector_rules_from_fitz_page
+
+    with contextlib.suppress(Exception):
+        rules = vector_rules_from_fitz_page(page)
+    return layer, words, rules, ok
+
+
 def _collect_page_texts(
     doc: Any,
     page_count: int,
@@ -418,8 +463,10 @@ def _collect_page_texts(
     use_ocr: UseOcrT = "auto",
     ocr: OcrOptions | None = None,
     explicit_ocr: bool = False,
-) -> tuple[list[Page], list[str], int, _OcrSummary]:
-    """Return (pages, raw page text chunks, total UTF-8 bytes, OCR summary).
+    text_mode: TextModeT = "plain",
+) -> tuple[list[Page], list[str], int, _OcrSummary, list[LayoutPageOutput] | None]:
+    """Return (pages, raw page text chunks, total UTF-8 bytes, OCR summary,
+    layout outputs — ``None`` in plain mode).
 
     Per-page OCR decision (GI-EXTRACT-01, Alloy
     ``PerPageOcrDecisionMechanism``): every page's text layer is read, the
@@ -432,11 +479,22 @@ def _collect_page_texts(
     and reports ``backend="none"``; `DependencyMissingError` propagates
     only when an engine was forced (``OcrOptions.engine`` / ``use_ocr=True``)
     or when the document would otherwise be completely empty.
+
+    Layout mode (``text_mode="layout"``): the plain-mode page text above is
+    kept as the renderer's passthrough text; the page's words (text layer
+    through the same text page, or the OCR words) go through `_layout` and
+    the rendering replaces the page text. A kept text layer on an OCR'd
+    stamp page is rendered as a leading paragraph above the OCR layout.
     """
     options = ocr or OcrOptions()
+    layout_mode = text_mode == "layout"
     layer_texts: dict[int, str] = {}
     decisions: dict[int, OcrDecision] = {}
     loaded: list[int] = []
+    geometry: dict[int, tuple[float, float]] = {}
+    digital_words: dict[int, list[Word]] = {}
+    page_rules: dict[int, list[Rule]] = {}
+    layout_failed = 0
 
     for i in range(page_count):
         try:
@@ -444,7 +502,15 @@ def _collect_page_texts(
         except Exception as exc:
             warnings.append(f"page {i}: could not load ({exc})")
             continue
-        layer = cast(str, page.get_text("text") or "")
+        if layout_mode:
+            layer, words, rules, ok = _read_page_for_layout(page)
+            digital_words[i] = words
+            page_rules[i] = rules
+            geometry[i] = (float(page.rect.width), float(page.rect.height))
+            if not ok:
+                layout_failed += 1
+        else:
+            layer = cast(str, page.get_text("text") or "")
         if not layer and i == 0:
             warnings.append("first page produced no text (OCR may help for scanned PDFs)")
         layer_texts[i] = layer
@@ -502,30 +568,106 @@ def _collect_page_texts(
         if run.failed:
             warnings.append(f"pdf: {_plural(len(run.failed), 'page')} failed OCR")
 
-    pages: list[Page] = []
     text_chunks: list[str] = []
-    total_bytes = 0
+    layout_inputs: list[LayoutPageInput] = []
     for i in loaded:
         decision = decisions[i]
         layer = layer_texts[i]
+        ocr_text = ""
+        ocr_words: list[Any] = []
+        if decision.needs_ocr and not backend_missing and doc_res is not None:
+            res = doc_res.results.get(i)
+            if res is not None:
+                ocr_text = res.text
+                ocr_words = res.words
         if not decision.needs_ocr or backend_missing:
             page_text = layer
+        elif decision.keep_text_layer:
+            page_text = layer
+            if ocr_text.strip():
+                page_text = f"{layer}\n\n{ocr_text}" if layer.strip() else ocr_text
         else:
-            ocr_text = ""
-            if doc_res is not None and i in doc_res.results:
-                ocr_text = doc_res.results[i].text
-            if decision.keep_text_layer:
-                page_text = layer
-                if ocr_text.strip():
-                    page_text = f"{layer}\n\n{ocr_text}" if layer.strip() else ocr_text
-            else:
-                page_text = ocr_text
-        pages.append(Page(index=i, text=canonicalize_text(page_text)))
+            page_text = ocr_text
         text_chunks.append(page_text)
+        if not layout_mode:
+            continue
+        from_ocr = decision.needs_ocr and not backend_missing and bool(ocr_text.strip())
+        lead = ""
+        if from_ocr:
+            try:
+                words = layout_words_from_ocr(ocr_words)
+            except Exception:
+                words = []
+                layout_failed += 1
+            if decision.keep_text_layer and layer.strip():
+                lead = layer
+        else:
+            words = digital_words.get(i, [])
+        page_w, page_h = geometry[i]
+        layout_inputs.append(
+            LayoutPageInput(
+                i, page_w, page_h, page_text, words, from_ocr, page_rules.get(i, []), lead
+            )
+        )
+
+    layout_outputs: list[LayoutPageOutput] | None = None
+    if layout_mode:
+        try:
+            layout_outputs = render_layout_pages(layout_inputs)
+        except Exception as exc:
+            # Fail-soft: the plain-mode text is always a valid rendering.
+            warnings.append(
+                f"pdf: layout rendering failed ({type(exc).__name__}); plain text emitted"
+            )
+            layout_outputs = [
+                LayoutPageOutput(t, False, word_count=word_count(t)) for t in text_chunks
+            ]
+        text_chunks = [o.text for o in layout_outputs]
+        if layout_failed:
+            warnings.append(
+                f"pdf: layout words unavailable on {_plural(layout_failed, 'page')}; "
+                "emitted as plain text"
+            )
+
+    pages: list[Page] = []
+    total_bytes = 0
+    for i, page_text in zip(loaded, text_chunks, strict=True):
+        pages.append(Page(index=i, text=canonicalize_text(page_text)))
         total_bytes += len(page_text.encode("utf-8"))
         if total_bytes > limits.max_text_bytes:
             raise ResourceExhaustedError("text size", limits.max_text_bytes, observed=total_bytes)
-    return pages, text_chunks, total_bytes, summary
+    return pages, text_chunks, total_bytes, summary, layout_outputs
+
+
+def _sections_from_layout(pages: list[Page], outputs: list[LayoutPageOutput]) -> list[Section]:
+    """`Section` records for the ``#`` lines the layout renderer emitted.
+
+    `SectionRecord` lines are 0-based inside the page text; `Page.line_start`
+    (1-based, into ``content.text``) maps them into document coordinates —
+    the same contract DOCX / HTML sections carry. The section body is the
+    page text between the heading and the section's last line.
+    """
+    sections: list[Section] = []
+    for page, out in zip(pages, outputs, strict=True):
+        if page.line_start is None or not out.sections:
+            continue
+        lines = page.text.split("\n")
+        for rec in out.sections:
+            if not 0 <= rec.line_start < len(lines):
+                continue
+            end = min(max(rec.line_end, rec.line_start), len(lines) - 1)
+            heading = lines[rec.line_start].lstrip("#").strip()
+            body = "\n".join(lines[rec.line_start + 1 : end + 1])
+            sections.append(
+                Section(
+                    heading=heading,
+                    level=max(1, min(rec.level, 4)),
+                    text=canonicalize_text(body),
+                    line_start=page.line_start + rec.line_start,
+                    line_end=page.line_start + end,
+                )
+            )
+    return sections
 
 
 def _open_doc(data: bytes) -> fitz.Document:
@@ -569,6 +711,7 @@ class PdfExtractor(IExtractor):
         use_ocr: UseOcrT = "auto",
         ocr_language: str = DEFAULT_OCR_LANGUAGE,
         ocr: OcrOptions | None = None,
+        text_mode: TextModeT = "plain",
     ) -> ExtractionResult:
         from collections import Counter
 
@@ -577,6 +720,7 @@ class PdfExtractor(IExtractor):
         limits = limits or Limits()
         if len(data) > limits.max_input_bytes:
             raise ResourceExhaustedError("input size", limits.max_input_bytes, observed=len(data))
+        mode = validate_text_mode(text_mode)
 
         warnings: list[str] = []
         counts: Counter[str] = Counter()
@@ -588,7 +732,7 @@ class PdfExtractor(IExtractor):
             if page_count > limits.max_pages:
                 raise ResourceExhaustedError("page_count", limits.max_pages, observed=page_count)
 
-            pages, text_chunks, _total_bytes, ocr_summary = _collect_page_texts(
+            pages, text_chunks, _total_bytes, ocr_summary, layout_outputs = _collect_page_texts(
                 doc,
                 page_count,
                 limits,
@@ -596,6 +740,7 @@ class PdfExtractor(IExtractor):
                 use_ocr=use_ocr,
                 ocr=ocr_options,
                 explicit_ocr=ocr is not None,
+                text_mode=mode,
             )
             full_text = canonicalize_text("\n\n".join(text_chunks))
             ocr_applied = ocr_summary.ocr_pages > 0
@@ -643,6 +788,12 @@ class PdfExtractor(IExtractor):
                 p.line_start = 1 + full_text.count("\n", 0, loc)
                 p.line_end = 1 + full_text.count("\n", 0, loc + len(p.text) - 1)
                 cursor = loc + len(p.text)
+
+            # Layout mode: `Section` records from the emitted `#` lines
+            # (page-relative lines mapped through Page.line_start).
+            sections: list[Section] | None = None
+            if layout_outputs is not None:
+                sections = _sections_from_layout(pages, layout_outputs) or None
 
             # Markdown path — whole-doc via pymupdf4llm (text-layer PDFs only).
             markdown: str | None = None
@@ -715,6 +866,18 @@ class PdfExtractor(IExtractor):
                 if ocr_summary.mean_conf is not None:
                     extra["pdf:ocr_mean_conf"] = ocr_summary.mean_conf
 
+            # Layout-mode scalars (counts only; absent in plain mode so the
+            # default output is unchanged). The word count is taken on the
+            # markup-stripped text so it matches plain mode on unstructured
+            # documents (plan §4, [C-reg-11]).
+            if layout_outputs is not None:
+                extra["pdf:text_mode"] = "layout"
+                extra["pdf:structured_pages"] = sum(1 for o in layout_outputs if o.structured)
+                extra["pdf:layout_tables"] = sum(o.tables for o in layout_outputs)
+                total_words = sum(o.word_count for o in layout_outputs)
+            else:
+                total_words = word_count(full_text)
+
             finalize_warnings(counts, warnings)
 
             metadata = Metadata(
@@ -724,7 +887,7 @@ class PdfExtractor(IExtractor):
                 created=_parse_pdf_date(raw_meta.get("creationDate")),
                 modified=_parse_pdf_date(raw_meta.get("modDate")),
                 page_count=page_count,
-                word_count=word_count(full_text),
+                word_count=total_words,
                 extra=extra,
             )
 
@@ -754,6 +917,7 @@ class PdfExtractor(IExtractor):
                 filename=filename,
                 metadata=metadata,
                 pages=pages or None,
+                sections=sections,
                 warnings=warnings,
                 markdown=markdown,
                 sentences=sentences,

@@ -79,6 +79,85 @@ def test_unicode_text_round_trips(text: str) -> None:
     assert canonicalize_text(result.content.text) == result.content.text
 
 
+# --- text_mode="layout" path (PDF, fake OCR backend — no live engine) ------
+
+
+class _EmptyOcrBackend:
+    """Returns no text and never touches the image (`needs_image=False`)."""
+
+    name = "fake-empty"
+    needs_image = False
+
+    def recognize(self, page_image: object) -> str:
+        return ""
+
+
+def _layout_kwargs() -> dict:
+    from knovas_extract import OcrOptions
+
+    return {
+        "mime": "application/pdf",
+        "limits": SMALL_LIMITS,
+        "text_mode": "layout",
+        "ocr": OcrOptions(backend=_EmptyOcrBackend(), workers=1),
+    }
+
+
+@given(data=st.binary(max_size=1 << 16))
+@settings(
+    max_examples=100,
+    deadline=2000,
+    suppress_health_check=[HealthCheck.too_slow, HealthCheck.large_base_example],
+)
+def test_random_bytes_never_crash_pdf_layout(data: bytes) -> None:
+    pytest.importorskip("fitz")
+    try:
+        result = extract(data, **_layout_kwargs())
+    except ExtractError:
+        return
+    assert isinstance(result, ExtractionResult)
+    assert "\f" not in result.content.text
+
+
+_PDF_LINE = st.text(
+    alphabet=st.characters(whitelist_categories=("L", "N", "P", "Zs"), max_codepoint=0x24F),
+    min_size=1,
+    max_size=40,
+)
+
+
+@given(lines=st.lists(_PDF_LINE, min_size=1, max_size=30))
+@settings(
+    max_examples=60,
+    deadline=2000,
+    suppress_health_check=[HealthCheck.too_slow, HealthCheck.data_too_large],
+)
+def test_valid_pdf_layout_mode_never_crashes(lines: list[str]) -> None:
+    """A well-formed born-digital PDF with random text lines: layout mode returns a
+    valid result, never a form feed, and falls back to plain text page by page."""
+    fitz = pytest.importorskip("fitz")
+    import io
+
+    doc = fitz.open()
+    page = doc.new_page()
+    for i, ln in enumerate(lines):
+        page.insert_text((72, 72 + 18 * i), ln, fontsize=10)
+    buf = io.BytesIO()
+    doc.save(buf)
+    doc.close()
+    data = buf.getvalue()
+    try:
+        plain = extract(data, mime="application/pdf", limits=SMALL_LIMITS)
+        result = extract(data, **_layout_kwargs())
+    except ExtractError:
+        return
+    assert isinstance(result, ExtractionResult)
+    assert "\f" not in result.content.text and "\n\n\n" not in result.content.text
+    assert result.metadata.extra["pdf:text_mode"] == "layout"
+    if result.metadata.extra["pdf:structured_pages"] == 0:
+        assert result.content.text == plain.content.text
+
+
 # --- emit_markdown=True path -----------------------------------------------
 
 # Hostile HTML strategy: pick a scaffold and inject random combinations of

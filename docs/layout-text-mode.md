@@ -34,6 +34,56 @@ digital contract in the golden fixtures is such a page (its plain text is
 already in reading order); the same page as an OCR scan has a gutter, is
 structured, and is re-ordered column by column.
 
+## Using it
+
+```python
+from knovas_extract import extract, OcrOptions
+
+r = extract("bilanz.pdf", text_mode="layout")                 # plain mode stays the default
+r = extract("scan.pdf", text_mode="layout", emit_sentences=True,
+            ocr=OcrOptions(workers=4))                        # OCR words are rendered the same way
+r.content.text          # markdown-lite pages joined with "\n\n", canonicalised as in plain mode
+r.content.pages         # Page.text is the rendered page; unstructured pages == plain mode
+r.content.sections      # one Section per emitted '#' line (level <= 4, 1-based line window
+                        #   into content.text, body text) — the DOCX / HTML contract
+r.metadata.extra["pdf:text_mode"]          # "layout"
+r.metadata.extra["pdf:structured_pages"]   # pages that were rendered (not passthrough)
+r.metadata.extra["pdf:layout_tables"]      # table regions rendered (key-value grids excluded)
+```
+
+CLI: `knovas-extract bilanz.pdf --text-mode layout`.
+
+* `text_mode` accepts `"plain"` (default) or `"layout"`; anything else raises
+  `ValueError`. The three `pdf:*` scalars above are present **only** in layout
+  mode — the default output of 0.4.0 is byte-identical to plain mode, with no
+  new keys and no `content.sections`.
+* **PDF only in 0.4.0.** For every other format (DOCX, HTML, …) the kwarg is
+  accepted, the extractor runs in plain mode and exactly one warning is added:
+  `text_mode='layout' is implemented for PDF only; plain text emitted`. DOCX
+  layout mode is a later milestone (plan M4); the RemoteController therefore
+  passes `text_mode` for PDFs only.
+* **Per page**: a born-digital page is rendered from the words of the *same*
+  PyMuPDF text page that produced its plain text (`TEXTFLAGS_TEXT`), plus the
+  vector rulings; an OCR'd page from the engine's word boxes (already in page
+  points). A scanner stamp kept over a full-page scan (decision rule 4) leads
+  the page as a paragraph above the OCR layout. Pages whose layout analysis
+  fails are emitted as plain text with one counted warning (`pdf: layout words
+  unavailable on N pages`, `pdf: layout rendering failed`).
+* `metadata.word_count` is computed on the markup-stripped text (`|`
+  separators, `#` prefixes, `- ` bullets, compact fold keys and repeated pack
+  headers removed), so it equals plain mode on unstructured documents.
+* `content.sentences` (`emit_sentences=True`) carries exact offsets into the
+  rendered text; every consumer contract of `docs/citations.md` holds, and a
+  table row — one physical line — becomes one sentence pointing at the
+  innermost `#` section.
+* `spec_version` stays 1.3.0 (scalars only; the grammar is documented here
+  until spec 1.4.0 defines `text_mode`).
+
+Tests: `tests/unit/test_extractors_pdf_layout.py` (byte-identity, grammar,
+sections, contracts, determinism incl. 1 vs 4 OCR workers, expansion bound),
+`tests/golden/test_prose_regression.py` (20 synthetic one-/two-column law-firm
+contracts byte-identical to plain mode), `tests/property/test_layout_properties.py`.
+
 ## Public API
 
 ```python
