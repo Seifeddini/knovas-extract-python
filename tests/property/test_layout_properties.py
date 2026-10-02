@@ -17,7 +17,7 @@ from __future__ import annotations
 from collections import Counter
 
 import pytest
-from hypothesis import HealthCheck, given, settings
+from hypothesis import HealthCheck, example, given, settings
 from hypothesis import strategies as st
 
 from knovas_extract._layout import (
@@ -90,6 +90,15 @@ def _render(words: list[Word]) -> tuple[str, list[str]]:
 
 
 @given(lines=_PAGE)
+@example(  # renders ``A | 0.00\nA\nA | 0.00\n\nA AAA: A`` — the R4 colon lands on ``AAA``
+    lines=[
+        (["A"], ["0.00"], 0.0, 10.0, False),
+        (["A"], [], 0.0, 10.0, False),
+        (["A"], ["0.00"], 0.0, 10.0, False),
+        (["A", "AAA"], [], 0.0, 10.0, False),
+        (["A"], [], 0.0, 10.0, False),
+    ]
+)
 @settings(
     max_examples=150,
     deadline=2000,
@@ -98,7 +107,8 @@ def _render(words: list[Word]) -> tuple[str, list[str]]:
 def test_every_input_word_survives_exactly_once(lines: list) -> None:
     """A vertical key-value box (R4: ``A AAA`` over ``A`` → ``A AAA: A``) adds the kv
     colon to the label's last word by design; generated words never carry a colon,
-    so the trailing colon is stripped before counting (as ``metrics.bow`` does)."""
+    so the trailing colon is stripped before counting (as ``metrics.bow`` does). The
+    explicit example is the page that fails without the strip (``AAA`` counted 0)."""
     words = _page_words(lines)
     text, _kinds = _render(words)
     want = Counter(w.text for w in words)

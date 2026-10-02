@@ -65,7 +65,27 @@ A **major** version bump matches the major of `spec_version` it conforms to.
   `tests/golden/test_layout_synth_golden.py`, `tests/fixtures/synth/`). On the
   Treuhand OCR fixtures this moves the invoice heading, kv lines and the fax
   bank-statement header out of glued header cells (heading recall/precision and
-  intact up, no metric down).
+  intact up, no metric down). The guard applies to any lone label-column cell
+  (a lone period `2023` too) and ends the upward scan. A lone cell that carries
+  the header row's em and weight, sits within 1.3 × pitch of it and is
+  digit-free text without a colon — a header label wrapped over two lines,
+  `Ertrag und` over `Aufwand | 31.12.2023 | …` — is not treated as a caption but
+  handled exactly as before the guard (the header is lost on that shape, as in
+  0.3.x; it is never freed into a `###` heading that would pop the subtitle out
+  of the heading context of every chunk below). Folding such a fragment into
+  the header's label cell is a known gap.
+- Known limitation — OCR'd statement title lines: on a scanned statement page
+  the title lines (`Jahresrechnung 2023` over `Bilanz per 31. Dezember 2023`)
+  are linked into one paragraph by the OCR em tolerance, so the conservative
+  OCR heading policy (≥ 1.3 × the body height **plus** a standalone cue) emits
+  no `#` line for them; the rows render, the page has no heading. A title-block
+  rule was built and withheld after adversarial review: measured on
+  Tesseract ink boxes against a document-wide body height, it produced
+  headings from recipient blocks, from letter lines above an invoice table
+  whenever the bundle holds a fine-print page, and from wrapped header lines —
+  and a false `#` is prepended to every chunk below it on the server. The
+  attempt is kept as `docs/superpowers/patches/2026-10-02-knovas-extract-ocr-title-block.patch`
+  in the KnowledgeBase repository.
 
 ### Added — OCR engines, budgets, options (`docs/ocr.md`)
 - **`extract(..., ocr=OcrOptions(...))`** and `--ocr-engine/--ocr-dpi/

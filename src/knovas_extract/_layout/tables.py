@@ -187,28 +187,45 @@ def _header_above(
     header: every segment fits one of the run's columns, no amounts, short cells, no
     heading-size text, within 2.5 × pitch of the line below. Returned bottom-up.
 
-    Caption guard: when the run already *opens* with an amount-free line of ≥ 2 cells
-    (its own header ``Ertrag und Aufwand | 31.12.2023 | 31.12.2022``, or a key-value
-    row ``Datum: | 05.04.2024``), a line above it that is one text cell over the
-    label column is a caption, subtitle or stray key (``Erfolgsrechnung 2023`` at
-    11 pt, under the heading-size guard; ``Kunden-Nr.: 10482``; ``Kontoinhaber:``)
-    and never a header cell. Taking it would put a label-only line at the top of the
-    grid, which makes :func:`table_structure` find no header at all: the real header
-    rows then render as data rows, no fold keys, nothing repeated into the packs, and
-    the subtitle becomes a ``####`` section row instead of its own heading — or,
-    on a kv grid, the caption is glued into the first key. The guard needs both cues
-    (a lone label-column text cell *and* a run that opens amount-free with ≥ 2
-    cells); a lone label above a run that opens with an amount row is still taken as
-    before (the grid's leading label-only line / section row), and multi-cell lines
-    above the run (stacked ``CHF | CHF`` lines, two-cell headers that are not row
-    candidates) are unaffected.
+    Caption guard: when the run already *opens* amount-free (its own header
+    ``Ertrag und Aufwand | 31.12.2023 | 31.12.2022``, or a key-value row
+    ``Datum: | 05.04.2024``; a run line always has ≥ 2 cells, see :func:`_is_cand`),
+    a line above it that is one cell over the label column is a caption, subtitle or
+    stray key (``Erfolgsrechnung 2023`` at 11 pt, under the heading-size guard; a lone
+    period ``2023``; ``Kunden-Nr.: 10482``; ``Kontoinhaber:``) and never a header cell.
+    Taking it would put a label-only line at the top of the grid, which makes
+    :func:`table_structure` find no header at all: the real header rows then render as
+    data rows, no fold keys, nothing repeated into the packs, and the subtitle becomes
+    a ``####`` section row instead of its own heading — or, on a kv grid, the caption
+    is glued into the first key. The guard ends the upward scan (nothing above a
+    caption is a header line). A lone label above a run that opens with an amount row
+    is still taken as before (the grid's leading label-only line / section row);
+    multi-cell lines above the run (stacked ``CHF | CHF`` lines, ``Soll | Haben``) and a
+    lone stacked word over a *value* column (``Vorjahr`` over ``31.12.2022``) are
+    unaffected.
+
+    Wrapped-label exception (:func:`_label_fragment`): a header label wrapped over two
+    lines (``Ertrag und`` over ``Aufwand | 31.12.2023 | 31.12.2022``) or a bare label
+    over a label-less date header (``Aktiven`` over ``31.12.2023 | 31.12.2022``) has a
+    caption's shape but belongs to the header. Freed from the table, a bold fragment
+    becomes a ``###`` heading at the subtitle's level on a digital page and pops the
+    real subtitle out of the heading context of every chunk below it. So a lone
+    label-column cell that carries the header row's em and bold signature, sits within
+    1.3 × pitch of it, is digit-free text and ends in no colon is **not** treated as a
+    caption: the scan continues and the pre-guard rules decide, exactly as before the
+    guard existed (the fragment is taken as a header line, the grid opens label-only
+    and the header is lost — the pre-existing rendering, never a new heading). Folding
+    the fragment into the header's label cell is deliberately not done here: a fold in
+    :func:`table_structure` cannot see these cues and would also fold section titles
+    and company names reached through the amount-row path into every pack's header.
     """
     cols = _columns(run, u)
     band = _label_em(run, ocr=ocr)
     guard = 1.3 if ocr else 1.2
     out: list[int] = []
     below_y0 = min(s.y0 for s in run[0])
-    run_opens_with_header = len(run[0]) >= 2 and not any(s.numeric() for s in run[0])
+    run_opens_with_header = not any(s.numeric() for s in run[0])
+    header_row = run_opens_with_header and not _is_kv_row(run[0])
     k = i - 1
     while k >= 0 and len(out) < 3 and k not in taken:
         line = vlines[k]
@@ -220,8 +237,8 @@ def _header_above(
         if (
             run_opens_with_header
             and len(line) == 1
-            and has_letters(line[0].text)
             and min(line[0].x1, cols[0][1]) - max(line[0].x0, cols[0][0]) > 0
+            and not (header_row and k == i - 1 and _label_fragment(line[0], run[0], pitch, ocr=ocr))
         ):
             break  # caption / subtitle over a run that carries its own header
         fits = True
@@ -243,6 +260,27 @@ def _header_above(
         below_y0 = min(s.y0 for s in line)
         k -= 1
     return out
+
+
+def _label_fragment(seg: Segment, below: Sequence[Segment], pitch: float, *, ocr: bool) -> bool:
+    """Does *seg* (one cell over the label column, directly above the header row
+    *below*) look like a wrapped or stacked fragment of that header's label rather
+    than a caption? Every cue is required: digit-free text (≥ 3 consecutive letters)
+    without a trailing colon, a baseline within 1.3 × pitch of *below*, the same em as
+    *below* (± 5 %; OCR ± 8 %, word heights there are noisy) and the same bold
+    signature. Only the line directly above the run is ever asked (a fragment cannot
+    sit above a caption)."""
+    text = seg.text
+    if not has_letters(text) or text.endswith(":") or any(ch.isdigit() for ch in text):
+        return False
+    if min(s.y0 for s in below) - seg.y0 > 1.3 * pitch:
+        return False
+    ref = st.median([s.em() for s in below])
+    if ref <= 0 or abs(seg.em() - ref) > (0.08 if ocr else 0.05) * ref:
+        return False
+    n = sum(s.n_words for s in below)
+    below_bold = sum(s.bold_ratio() * s.n_words for s in below) / n >= 0.5
+    return (seg.bold_ratio() >= 0.5) == below_bold
 
 
 def _is_kv_row(line: Sequence[Segment]) -> bool:

@@ -193,10 +193,23 @@ lines that repeat the label plus `(Forts.)`.
   11 pt — under the size guard —, `Kunden-Nr.: 10482`, `Kontoinhaber:`) is a
   caption, never a header line; taking it put a label-only line on top of the
   grid, lost the real header (no fold keys, nothing repeated into the packs)
-  and turned the subtitle into a `####` section row. A lone label above a run
-  that opens with an amount row is still taken (section row), and multi-word
-  label headers are accepted exactly like one-word ones on digital and OCR
-  words (`tests/golden/test_layout_synth_golden.py`).
+  and turned the subtitle into a `####` section row. The guard applies to any
+  lone label-column cell (a lone period `2023` too) and ends the upward scan.
+  A lone label above a run that opens with an amount row is still taken
+  (section row); multi-cell lines (`Soll | Haben`) and a lone word over a value
+  column (`Vorjahr`) are header lines as before; multi-word label headers are
+  accepted exactly like one-word ones on digital and OCR words
+  (`tests/golden/test_layout_synth_golden.py`). **Wrapped-label fall-through**
+  (`_label_fragment`): a header label wrapped over two lines (`Ertrag und` over
+  `Aufwand | 31.12.2023 | …`) has a caption's shape but belongs to the header;
+  freed, a bold fragment would become a `###` heading at the subtitle's level
+  and pop the subtitle out of the heading context of every chunk below. So a
+  lone label-column cell with the header row's em (± 5 %, OCR ± 8 %) and bold
+  signature, within 1.3 × pitch of it, digit-free and without a colon, is not a
+  caption: the pre-guard rules decide, as in 0.3.x (the header is lost on that
+  shape — never a new heading). Folding the fragment into the label cell is a
+  known gap: a fold in `table_structure` cannot see these cues and would also
+  fold section titles reached through the amount-row path into every pack.
 * **R4 key-value forms** — horizontal grids (`Name: | Meier`), vertical boxes
   (label line, values ≤ 1.4 × pitch below inside each label's box, one value per
   box, ≤ 6 words, no continuation line under the value — a Lohnausweis), inline

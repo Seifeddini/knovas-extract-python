@@ -440,6 +440,184 @@ def test_lone_label_over_headerless_run_is_still_taken() -> None:
     )
 
 
+def _title() -> list[Word]:
+    return words_line(50, 60, "Grosser Titel", 16, True)
+
+
+def _first_run(lay: Any, *, ocr: bool = False) -> list[list[str]]:
+    return [[s.text for s in ln] for ln in detect_tables(lay.vlines, lay.u, lay.page_w, ocr=ocr)[0]]
+
+
+def _header_on_every_pack(md: str, header: str) -> None:
+    packs = [b for b in md.split("\n\n") if " | " in b]
+    assert len(packs) >= 2, md
+    assert all(p.split("\n")[0] == header and p.count(header) == 1 for p in packs), md
+    assert check_invariants(md) == []
+
+
+SMALL = LayoutOptions(pack_budget_tokens=70)
+HEADER = "Ertrag und Aufwand | 31.12.2023 CHF | 31.12.2022 CHF"
+
+
+@pytest.mark.parametrize("ocr", [False, True])
+def test_wrapped_label_fragment_is_never_freed_into_a_heading(ocr: bool) -> None:
+    """Wrapped-label fall-through: a bold 10 pt ``Ertrag und`` one row above
+    ``Aufwand | 31.12.2023 | 31.12.2022`` (same em, same weight, within 1.3 × pitch,
+    digit-free) is not a caption. The scan continues and the pre-guard rules take it
+    as a header line — the pre-existing rendering of that shape (the grid opens
+    label-only, so the header is lost) — but it is never freed into a ``### Ertrag und``
+    heading at the subtitle's level: the 11 pt subtitle keeps its place on the heading
+    stack of every chunk below (``#{1,3}``) and no ``#{1,3} Ertrag und`` line exists."""
+    ws = (
+        _title()
+        + words_line(50, 270, "Erfolgsrechnung 2023", 11, True)
+        + words_line(50, 286, "Ertrag und", 10, True)
+        + statement_table(300, label="Aufwand")
+    )
+    lay = build_page_text(ws, 595, 842, ocr=ocr, opts=SMALL)
+    run = _first_run(lay, ocr=ocr)
+    assert run[0] == ["Ertrag und"] and run[1] == ["Aufwand", "31.12.2023", "31.12.2022"], run
+    assert "Erfolgsrechnung 2023" not in [ln[0] for ln in run]  # the subtitle stays a caption
+    md = render_page(lay, plain_text="")
+    assert check_invariants(md) == []
+    assert not re.search(r"^#{1,3} .*Ertrag und", md, re.M), md
+    assert "Ertrag und" in md and md.count("Ertrag und") == 1, md
+    if not ocr:
+        assert re.search(r"^#{1,3} Erfolgsrechnung 2023$", md, re.M), md
+
+
+def test_bare_label_over_label_less_date_header_is_not_freed_into_a_heading() -> None:
+    """``Aktiven`` (bold 10 pt) one row above a label-less ``31.12.2023 | 31.12.2022``
+    header: the same fall-through — never a ``### Aktiven`` heading that pops the real
+    subtitle out of the heading stack."""
+    ws = (
+        _title()
+        + words_line(50, 270, "Bilanz per 31. Dezember 2023", 11, True)
+        + words_line(50, 286, "Aktiven", 10, True)
+        + [right(430, 300, "31.12.2023", 10, True), right(530, 300, "31.12.2022", 10, True)]
+    )
+    for i in range(4):
+        y = 318 + 18 * i
+        ws += [
+            *words_line(50, y, f"Position {i} Aktiven", 10),
+            right(430, y, f"{i + 1}'200.00", 10),
+            right(530, y, f"{i + 1}'100.00", 10),
+        ]
+    lay = build_page_text(ws, 595, 842, ocr=False, opts=SMALL)
+    assert _first_run(lay)[0] == ["Aktiven"]
+    md = render_page(lay, plain_text="")
+    assert check_invariants(md) == []
+    assert not re.search(r"^#{1,3} Aktiven$", md, re.M), md
+    assert re.search(r"^#{1,3} Bilanz per 31\. Dezember 2023$", md, re.M), md
+
+
+def test_lone_numeric_caption_over_header_opening_run_is_not_taken() -> None:
+    """The caption guard needs no letters: a lone period ``2023`` over the label column
+    (date-like, so it passes the no-amount header filter) is a caption too; taking it
+    had put a label-only line on top of the grid and lost the real header."""
+    ws = _title() + words_line(50, 270, "2023", 11, True) + statement_table(300)
+    lay = build_page_text(ws, 595, 842, ocr=False, opts=SMALL)
+    assert _first_run(lay)[0] == ["Ertrag und Aufwand", "31.12.2023", "31.12.2022"]
+    md = render_page(lay, plain_text="")
+    _header_on_every_pack(md, HEADER)
+    assert "\n2023\n\n" in md  # the period stays a paragraph line of its own
+
+
+def test_lone_stacked_word_over_a_value_column_is_a_header_line() -> None:
+    """The guard is bound to the label column: a lone ``Vorjahr`` right-aligned over the
+    second amount column above a header-opening run is a stacked column header and is
+    still taken (merged into that column's header cell on every pack)."""
+    ws = [*_title(), right(530, 282, "Vorjahr", 11, True), *statement_table(300)]
+    lay = build_page_text(ws, 595, 842, ocr=False, opts=SMALL)
+    assert _first_run(lay)[0] == ["Vorjahr"]
+    md = render_page(lay, plain_text="")
+    _header_on_every_pack(md, "Ertrag und Aufwand | 31.12.2023 CHF | Vorjahr 31.12.2022 CHF")
+    assert "Vorjahr\n\n" not in md and not re.search(r"^#+ Vorjahr", md, re.M)
+
+
+def test_two_cell_line_over_header_opening_run_is_taken_and_scan_stops_at_a_caption() -> None:
+    """Multi-cell lines are not captions: ``Soll | Haben`` over the amount columns right
+    above the header is taken as a stacked header line. Above a caption, the same line
+    is out of reach: the guard ends the upward scan instead of skipping the caption."""
+    soll_haben = [right(430, 282, "Soll", 10, True), right(530, 282, "Haben", 10, True)]
+    lay = build_page_text(_title() + soll_haben + statement_table(300), 595, 842, ocr=False)
+    assert _first_run(lay)[0] == ["Soll", "Haben"]
+    assert "Ertrag und Aufwand | Soll 31.12.2023 CHF | Haben 31.12.2022 CHF" in render_page(
+        lay, plain_text=""
+    )
+    konto = [*words_line(50, 282, "Konto"), right(530, 282, "Vorjahr")]  # regular weight
+    lay = build_page_text(_title() + konto + statement_table(300), 595, 842, ocr=False)
+    assert _first_run(lay)[0] == ["Konto", "Vorjahr"]  # first cell over the label column
+    above_caption = [right(430, 254, "Soll", 10, True), right(530, 254, "Haben", 10, True)]
+    ws = _title() + above_caption + words_line(50, 270, "Erfolgsrechnung 2023", 11, True)
+    lay = build_page_text(ws + statement_table(300), 595, 842, ocr=False)
+    assert _first_run(lay)[0] == ["Ertrag und Aufwand", "31.12.2023", "31.12.2022"]
+    assert "Soll" in render_page(lay, plain_text="").split("Ertrag und Aufwand")[0]
+
+
+def test_lone_key_column_word_over_a_kv_run_is_a_caption() -> None:
+    """The fall-through needs a header *row*: over a run that opens with a
+    ``Key: | value`` row, a lone same-size, digit-free word in the key column
+    (``Kontoangaben`` over ``Datum: | 05.04.2024``) is a caption and is never glued into
+    the first key."""
+    ws = _title() + words_line(50, 282, "Kontoangaben")
+    for i, (k, v) in enumerate(
+        [("Datum:", "05.04.2024"), ("Zahlbar bis:", "05.05.2024"), ("Kunden-Nr.:", "10482")]
+    ):
+        ws += words_line(50, 300 + 18 * i, k) + words_line(150, 300 + 18 * i, v)
+    lay = build_page_text(ws, 595, 842, ocr=False)
+    run = _first_run(lay)
+    assert run[0] == ["Datum:", "05.04.2024"] and "Kontoangaben" not in str(run)
+    md = render_page(lay, plain_text="")
+    assert md.count("Kontoangaben") == 1 and "Kontoangaben Datum" not in md, md
+
+
+@pytest.mark.parametrize(
+    ("fragment", "why"),
+    [
+        (words_line(50, 286, "Ertrag und", 11, True), "em differs by 10 %"),
+        (words_line(50, 286, "Ertrag und", 10, False), "bold signature differs"),
+        (words_line(50, 270, "Ertrag und", 10, True), "1.7 x pitch above the header"),
+        (words_line(50, 286, "Ertrag und:", 10, True), "trailing colon (a kv key)"),
+        (words_line(50, 286, "Ertrag 2023", 10, True), "carries a digit"),
+        (words_line(50, 286, "%", 10, True), "no letters (a lone unit sign)"),
+    ],
+    ids=["em", "bold", "distance", "colon", "digit", "letters"],
+)
+def test_label_fragment_fall_through_needs_every_cue(fragment: list[Word], why: str) -> None:
+    """Each cue of the wrapped-label fall-through is load-bearing: a lone label-column
+    cell that misses one is a caption (never a header line), the run opens with the
+    header row itself and the caption appears exactly once, outside the table."""
+    ws = _title() + fragment + statement_table(300, label="Aufwand")
+    lay = build_page_text(ws, 595, 842, ocr=False, opts=SMALL)
+    assert _first_run(lay)[0] == ["Aufwand", "31.12.2023", "31.12.2022"], why
+    md = render_page(lay, plain_text="")
+    _header_on_every_pack(md, "Aufwand | 31.12.2023 CHF | 31.12.2022 CHF")
+    caption = " ".join(w.text for w in fragment)
+    assert md.count(caption) == 1 and " | " not in md.split("\n\n")[1], (why, md)
+
+
+def test_label_fragment_is_only_asked_of_the_line_directly_above_the_header() -> None:
+    """A same-size, same-weight, digit-free line two rows above the header (a caption
+    between them) is never a fragment: the guard stops at the caption, neither line
+    enters the run and the header is kept on every pack. What R1 then makes of the two
+    bold short lines outside the table (here its pre-existing two-segment join) is the
+    heading rule's business, not the guard's."""
+    ws = (
+        _title()
+        + words_line(50, 254, "Ertrag und", 10, True)
+        + words_line(50, 270, "Erfolgsrechnung 2023", 11, True)
+        + statement_table(300, label="Aufwand")
+    )
+    lay = build_page_text(ws, 595, 842, ocr=False, opts=SMALL)
+    run = _first_run(lay)
+    assert run[0] == ["Aufwand", "31.12.2023", "31.12.2022"], run
+    assert "Ertrag und" not in str(run) and "Erfolgsrechnung 2023" not in str(run)
+    md = render_page(lay, plain_text="")
+    _header_on_every_pack(md, "Aufwand | 31.12.2023 CHF | 31.12.2022 CHF")
+    assert md.count("Ertrag und") == 1 and md.count("Erfolgsrechnung 2023") == 1, md
+
+
 def test_rules_split_cells_and_hrules_are_exposed() -> None:
     ws = table(100)
     lay = build_page_text(ws, 595, 842, ocr=False, rules=[Rule("v", 300, 90, 300, 200), 120.0])
