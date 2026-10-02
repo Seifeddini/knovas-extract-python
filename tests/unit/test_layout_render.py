@@ -26,7 +26,7 @@ from knovas_extract._layout.headings import classify_heading, heading_levels
 from knovas_extract._layout.lint import split_long_row
 from knovas_extract._layout.render import Part, assemble, passthrough
 from knovas_extract._layout.segments import Segment
-from knovas_extract._layout.tables import TableGrid, TableRow, render_table_parts
+from knovas_extract._layout.tables import TableGrid, TableRow, detect_tables, render_table_parts
 
 pytestmark = [pytest.mark.unit]
 
@@ -372,6 +372,72 @@ def test_document_stats_mixed_modalities_and_lazy_fit() -> None:
     fitted = dig.doc
     assert isinstance(fitted, DocStats) and dig.sections == []
     assert dig.hrules == [] and dig.vrules == []
+
+
+def statement_table(
+    y0: float = 300, n: int = 4, *, label: str = "Ertrag und Aufwand"
+) -> list[Word]:
+    """A statement table with a multi-word label header over the label column, the
+    stacked ``CHF | CHF`` line and ``n`` amount rows (18 pt pitch)."""
+    ws = [
+        *words_line(50, y0, label, 10, bold=True),
+        right(430, y0, "31.12.2023", 10, True),
+        right(530, y0, "31.12.2022", 10, True),
+        right(430, y0 + 18, "CHF", 10, True),
+        right(530, y0 + 18, "CHF", 10, True),
+    ]
+    for i in range(n):
+        y = y0 + 18 * (i + 2)
+        ws += [
+            *words_line(50, y, f"Position {i} Aufwand", 10),
+            right(430, y, f"{i + 1}'200.00", 10),
+            right(530, y, f"{i + 1}'100.00", 10),
+        ]
+    return ws
+
+
+@pytest.mark.parametrize("ocr", [False, True])
+def test_caption_over_table_with_own_header_keeps_multiword_label_header(ocr: bool) -> None:
+    """R3 caption guard: a two-word 11 pt subtitle (under the heading-size guard) right
+    above a header row whose label cell is ``Ertrag und Aufwand`` is not taken as a
+    header line; the real header keeps its label, folds the year keys and is repeated
+    on top of every pack, and the subtitle is not a ``####`` section row."""
+    ws = (
+        words_line(50, 60, "Grosser Titel", 16, True)
+        + words_line(50, 270, "Erfolgsrechnung 2023", 11, True)
+        + statement_table(300)
+    )
+    lay = build_page_text(ws, 595, 842, ocr=ocr, opts=LayoutOptions(pack_budget_tokens=70))
+    md = render_page(lay, plain_text="")
+    header = "Ertrag und Aufwand | 31.12.2023 CHF | 31.12.2022 CHF"
+    packs = [b for b in md.split("\n\n") if " | " in b]
+    assert len(packs) >= 2, md
+    assert all(p.split("\n")[0] == header for p in packs), md
+    assert "Position 0 Aufwand | 2023: 1'200.00 | 2022: 1'100.00" in md
+    assert "#### Erfolgsrechnung 2023" not in md and "CHF | CHF\n" not in md
+    assert re.search(r"^(?:#{1,3} )?Erfolgsrechnung 2023$", md, re.M)
+    assert check_invariants(md) == []
+    run = detect_tables(lay.vlines, lay.u, lay.page_w, ocr=ocr)[0]
+    assert [s.text for s in run[0]] == ["Ertrag und Aufwand", "31.12.2023", "31.12.2022"]
+
+
+def test_lone_label_over_headerless_run_is_still_taken() -> None:
+    """Negative control for the caption guard: a run that opens with an amount row has
+    no header of its own, so the lone label above it still joins the run (section row)."""
+    ws = words_line(50, 60, "Grosser Titel", 16, True) + words_line(50, 282, "Umlaufvermoegen")
+    for i in range(4):
+        y = 300 + 18 * i
+        ws += [
+            *words_line(50, y, f"Position {i} Aufwand", 10),
+            right(430, y, f"{i + 1}'200.00", 10),
+            right(530, y, f"{i + 1}'100.00", 10),
+        ]
+    lay = build_page_text(ws, 595, 842, ocr=False)
+    run = detect_tables(lay.vlines, lay.u, lay.page_w)[0]
+    assert [s.text for s in run[0]] == ["Umlaufvermoegen"]
+    assert "#### Umlaufvermoegen\n\nPosition 0 Aufwand | 1'200.00 | 1'100.00" in render_page(
+        lay, plain_text=""
+    )
 
 
 def test_rules_split_cells_and_hrules_are_exposed() -> None:

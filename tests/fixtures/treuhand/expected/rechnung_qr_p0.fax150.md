@@ -10,16 +10,16 @@ Miller AG Herr Peter Miller Bahnhofstrasse 12 8001 Zürich
 
 Datum: Zahlbar bis: 05.05.2024
 
-Pos. | Kunden-Nr.: 10482 Beschreibung | Menge.Einheit | Preis CHF | Betrag CHF
+Kunden-Nr.: 10482
+
+Pos. | Beschreibung | Menge.Einheit | Preis CHF | Betrag CHF
 Massivholz-Einbauschrank Eiche, nach Mass N | 1 Stk. | Preis: 2480.00 | 2480.00.
 2 | Montage und Anpassarbeiten | 65 Sd. | Preis: 95.00. | Betrag: 617,50
-
-Pos. | Kunden-Nr.: 10482 Beschreibung | Menge.Einheit | Preis CHF | Betrag CHF
 3° | Lieferung und Entsorgung Verpackung | 1 Pauschal | Preis: 180.00 | Betrag: 180.00
+
+Pos. | Beschreibung | Menge.Einheit | Preis CHF | Betrag CHF
 4 | Beschläge Edelstahl! gebürstet | 12 Stk. | Preis: 34.50 | Betrag: 4 4.00
 Total netto | Betrag: 3691.50
-
-Pos. | Kunden-Nr.: 10482 Beschreibung | Menge.Einheit | Preis CHF | Betrag CHF
 MWST 8.1% | Betrag: 299.01
 Rechnungsbetrag CHF | Betrag: 3'990.51
 

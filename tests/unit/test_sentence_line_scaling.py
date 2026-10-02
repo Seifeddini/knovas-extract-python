@@ -24,11 +24,11 @@ def _naive_line(text: str, char_index: int) -> int:
 @pytest.mark.unit
 def test_line_coords_match_naive_computation() -> None:
     raw = (
-        "Alpha one. Alpha two.\n"
-        "Beta one. Beta two.\n"
-        "\n"
-        "Gamma one.\nGamma two. Gamma three.\n"
-    ).encode("utf-8")
+        b"Alpha one. Alpha two.\n"
+        b"Beta one. Beta two.\n"
+        b"\n"
+        b"Gamma one.\nGamma two. Gamma three.\n"
+    )
 
     result = extract(raw, mime="text/plain", emit_sentences=True)
     text = result.content.text

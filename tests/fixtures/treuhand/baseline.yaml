@@ -12,7 +12,7 @@ digital:
   numeric_f1_mean: 1.0
   intact: 0.9932
   tau_mean: 0.9723
-  ms_per_page: 5.0319
+  ms_per_page: 5.11
   contract:
     tau: 1.0
     intact: 1.0
@@ -25,13 +25,13 @@ clean300:
   cell_acc: 0.9644
   header_recall: 0.9773
   kv_ok: 0.8125
-  heading_recall: 0.2174
-  heading_precision: 0.6667
+  heading_recall: 0.2391
+  heading_precision: 0.6875
   numeric_f1: 0.9851
   numeric_f1_mean: 0.9989
-  intact: 0.9078
+  intact: 0.9317
   tau_mean: 0.9767
-  ms_per_page: 5.5772
+  ms_per_page: 5.5103
   contract:
     tau: 1.0
     intact: 0.9808
@@ -44,13 +44,13 @@ office300:
   cell_acc: 0.9081
   header_recall: 0.9773
   kv_ok: 0.7188
-  heading_recall: 0.2391
-  heading_precision: 0.6875
+  heading_recall: 0.2609
+  heading_precision: 0.7059
   numeric_f1: 0.8852
   numeric_f1_mean: 0.982
-  intact: 0.8942
+  intact: 0.9181
   tau_mean: 0.9796
-  ms_per_page: 4.8492
+  ms_per_page: 5.4017
   contract:
     tau: 1.0
     intact: 1.0
@@ -63,13 +63,13 @@ gray200:
   cell_acc: 0.9287
   header_recall: 0.9773
   kv_ok: 0.5938
-  heading_recall: 0.3043
-  heading_precision: 0.6667
+  heading_recall: 0.3261
+  heading_precision: 0.6818
   numeric_f1: 0.9389
   numeric_f1_mean: 0.989
-  intact: 0.8771
+  intact: 0.901
   tau_mean: 0.9644
-  ms_per_page: 5.3442
+  ms_per_page: 4.8759
   contract:
     tau: 1.0
     intact: 0.9904
@@ -82,13 +82,13 @@ skew15:
   cell_acc: 0.9081
   header_recall: 0.9773
   kv_ok: 0.6875
-  heading_recall: 0.2391
-  heading_precision: 0.6875
+  heading_recall: 0.2609
+  heading_precision: 0.7059
   numeric_f1: 0.832
   numeric_f1_mean: 0.9737
-  intact: 0.8703
+  intact: 0.8942
   tau_mean: 0.9759
-  ms_per_page: 5.4418
+  ms_per_page: 5.4348
   contract:
     tau: 1.0
     intact: 0.9904
@@ -101,13 +101,13 @@ stamp:
   cell_acc: 0.8649
   header_recall: 0.8636
   kv_ok: 0.6562
-  heading_recall: 0.2391
-  heading_precision: 0.55
+  heading_recall: 0.2609
+  heading_precision: 0.5714
   numeric_f1: 0.7155
   numeric_f1_mean: 0.9594
-  intact: 0.8123
+  intact: 0.8362
   tau_mean: 0.9588
-  ms_per_page: 4.937
+  ms_per_page: 5.8168
   contract:
     tau: 0.8651
     intact: 0.8942
@@ -124,9 +124,9 @@ fax150:
   heading_precision: 0.4231
   numeric_f1: 0.5696
   numeric_f1_mean: 0.8885
-  intact: 0.7235
-  tau_mean: 0.9366
-  ms_per_page: 5.101
+  intact: 0.7577
+  tau_mean: 0.952
+  ms_per_page: 5.5637
   contract:
     tau: 1.0
     intact: 0.6635

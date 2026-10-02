@@ -96,10 +96,13 @@ def _render(words: list[Word]) -> tuple[str, list[str]]:
     suppress_health_check=[HealthCheck.too_slow, HealthCheck.data_too_large],
 )
 def test_every_input_word_survives_exactly_once(lines: list) -> None:
+    """A vertical key-value box (R4: ``A AAA`` over ``A`` → ``A AAA: A``) adds the kv
+    colon to the label's last word by design; generated words never carry a colon,
+    so the trailing colon is stripped before counting (as ``metrics.bow`` does)."""
     words = _page_words(lines)
     text, _kinds = _render(words)
     want = Counter(w.text for w in words)
-    have = Counter(text.split())
+    have = Counter(t[:-1] if t.endswith(":") else t for t in text.split())
     for tok, n in want.items():
         assert have[tok] == n, (tok, n, have[tok], text)
 

@@ -55,6 +55,17 @@ A **major** version bump matches the major of `spec_version` it conforms to.
 - New `src/knovas_extract/_layout/` (pure-Python renderer, golden fixtures
   under `tests/fixtures/treuhand/`) and `_pdf_layout.py` (wiring);
   `pytest --update-golden` rewrites the golden-layout expectations.
+- Table caption guard (R3): a lone text cell over the label column right above
+  a table that already opens with its own header or key-value row (a subtitle
+  such as `Erfolgsrechnung 2023`, a stray `Kunden-Nr.: 10482`) is no longer
+  taken as a header line, which had dropped the real header (no fold keys,
+  no repetition into the packs) and turned the subtitle into a `####` section
+  row; a multi-word label header (`Ertrag und Aufwand | 31.12.2023 CHF | …`)
+  now renders like a one-word one on digital and OCR words (golden case
+  `tests/golden/test_layout_synth_golden.py`, `tests/fixtures/synth/`). On the
+  Treuhand OCR fixtures this moves the invoice heading, kv lines and the fax
+  bank-statement header out of glued header cells (heading recall/precision and
+  intact up, no metric down).
 
 ### Added — OCR engines, budgets, options (`docs/ocr.md`)
 - **`extract(..., ocr=OcrOptions(...))`** and `--ocr-engine/--ocr-dpi/

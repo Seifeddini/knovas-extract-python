@@ -1,9 +1,12 @@
 Abrechnung über die Mehrwertsteuer Effektive Abrechnungsmethode — Steuerperiode 2024
 
 CHE-123.456.789 MWST
-MWST-Nr.: Ref.-Nr.: | 481.205 / 2024-1
-Abrechnungsperiode: | CHE-123.456.789 MWST: 01.01.2024 - 31.03.2024
-Abrechnungsart: | Vereinbarte Entgelte
+
+MWST-Nr.:
+
+Ref.-Nr.: 481.205 / 2024-1
+Abrechnungsperiode: 01.01.2024 - 31.03.2024
+Abrechnungsart: Vereinbarte Entgelte
 
 Firma: I.UMSATZ
 

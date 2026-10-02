@@ -185,12 +185,30 @@ def _header_above(
 ) -> list[int]:
     """Indices of up to three lines directly above ``vlines[i]`` that read as the run's
     header: every segment fits one of the run's columns, no amounts, short cells, no
-    heading-size text, within 2.5 × pitch of the line below. Returned bottom-up."""
+    heading-size text, within 2.5 × pitch of the line below. Returned bottom-up.
+
+    Caption guard: when the run already *opens* with an amount-free line of ≥ 2 cells
+    (its own header ``Ertrag und Aufwand | 31.12.2023 | 31.12.2022``, or a key-value
+    row ``Datum: | 05.04.2024``), a line above it that is one text cell over the
+    label column is a caption, subtitle or stray key (``Erfolgsrechnung 2023`` at
+    11 pt, under the heading-size guard; ``Kunden-Nr.: 10482``; ``Kontoinhaber:``)
+    and never a header cell. Taking it would put a label-only line at the top of the
+    grid, which makes :func:`table_structure` find no header at all: the real header
+    rows then render as data rows, no fold keys, nothing repeated into the packs, and
+    the subtitle becomes a ``####`` section row instead of its own heading — or,
+    on a kv grid, the caption is glued into the first key. The guard needs both cues
+    (a lone label-column text cell *and* a run that opens amount-free with ≥ 2
+    cells); a lone label above a run that opens with an amount row is still taken as
+    before (the grid's leading label-only line / section row), and multi-cell lines
+    above the run (stacked ``CHF | CHF`` lines, two-cell headers that are not row
+    candidates) are unaffected.
+    """
     cols = _columns(run, u)
     band = _label_em(run, ocr=ocr)
     guard = 1.3 if ocr else 1.2
     out: list[int] = []
     below_y0 = min(s.y0 for s in run[0])
+    run_opens_with_header = len(run[0]) >= 2 and not any(s.numeric() for s in run[0])
     k = i - 1
     while k >= 0 and len(out) < 3 and k not in taken:
         line = vlines[k]
@@ -199,6 +217,13 @@ def _header_above(
         y1 = max(s.y1 for s in line)
         if below_y0 - y1 > 2.5 * pitch:
             break
+        if (
+            run_opens_with_header
+            and len(line) == 1
+            and has_letters(line[0].text)
+            and min(line[0].x1, cols[0][1]) - max(line[0].x0, cols[0][0]) > 0
+        ):
+            break  # caption / subtitle over a run that carries its own header
         fits = True
         for s in line:
             if (

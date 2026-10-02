@@ -186,7 +186,17 @@ lines that repeat the label plus `(Forts.)`.
   above the run), rulings for multi-line cells, and the **heading-size guard**:
   once a run has two lines, a text line ≥ 1.2 × (OCR: 1.3 ×) the band's label em
   never joins it — tax-form field codes stay out of the `Abzüge` heading and
-  section titles never become rows.
+  section titles never become rows. **Caption guard** (`_header_above`): when
+  the run already opens with an amount-free line of ≥ 2 cells (its own header
+  `Ertrag und Aufwand | 31.12.2023 | 31.12.2022`, or a `Key: | value` row), a
+  lone text cell over the label column just above it (`Erfolgsrechnung 2023` at
+  11 pt — under the size guard —, `Kunden-Nr.: 10482`, `Kontoinhaber:`) is a
+  caption, never a header line; taking it put a label-only line on top of the
+  grid, lost the real header (no fold keys, nothing repeated into the packs)
+  and turned the subtitle into a `####` section row. A lone label above a run
+  that opens with an amount row is still taken (section row), and multi-word
+  label headers are accepted exactly like one-word ones on digital and OCR
+  words (`tests/golden/test_layout_synth_golden.py`).
 * **R4 key-value forms** — horizontal grids (`Name: | Meier`), vertical boxes
   (label line, values ≤ 1.4 × pitch below inside each label's box, one value per
   box, ≤ 6 words, no continuation line under the value — a Lohnausweis), inline
