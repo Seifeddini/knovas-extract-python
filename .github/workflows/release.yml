@@ -99,7 +99,7 @@ jobs:
       - name: List downloaded wheels (debug)
         run: ls -la dist/
       - name: Sigstore-sign every distribution artifact
-        uses: sigstore/gh-action-sigstore-python@v3.4.0
+        uses: sigstore/gh-action-sigstore-python@v3.5.0
         with:
           inputs: |
             ./dist/*.whl
