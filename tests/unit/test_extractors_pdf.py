@@ -70,6 +70,26 @@ def test_empty_input_is_corrupt() -> None:
 
 
 @pytest.mark.unit
+@pytest.mark.parametrize(
+    "payload",
+    [
+        pytest.param(b"#\t\x01\x0c\x01\x00", id="markdown-sniffed-hypothesis-example"),
+        pytest.param(b"# title\n\nbody \x0c tail", id="markdown-sniffed"),
+        pytest.param(b"<html><body>x\x0cy</body></html>", id="html5-sniffed"),
+    ],
+)
+def test_non_pdf_payload_sniffed_by_mupdf_is_refused(payload: bytes) -> None:
+    """MuPDF 1.25+ opens a Markdown- or HTML-looking stream as a Markdown / HTML5
+    document even with ``filetype="pdf"``; the raw bytes (a form feed among them)
+    then came back as ``content.text``. The PDF extractor refuses what is not a
+    PDF instead of serving MuPDF's guess (hypothesis found the first payload)."""
+    with pytest.raises(CorruptDocumentError, match="not a PDF"):
+        extract(payload, mime="application/pdf")
+    with pytest.raises(CorruptDocumentError, match="not a PDF"):
+        extract(payload, mime="application/pdf", text_mode="layout")
+
+
+@pytest.mark.unit
 def test_encrypted_pdf_raises_encrypted_error() -> None:
     doc = fitz.open()
     page = doc.new_page()

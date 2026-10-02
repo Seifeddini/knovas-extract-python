@@ -104,6 +104,11 @@ A **major** version bump matches the major of `spec_version` it conforms to.
   (`OMP_THREAD_LIMIT`, `PATH`, `TESSDATA_PREFIX` when set), no shell;
   warnings and metadata carry counts, never page text; oversize images are
   rejected from the image dictionary before decoding. See SECURITY.md.
+- The PDF extractor refuses a payload that is not a PDF. MuPDF 1.25+ sniffs
+  the stream and, `filetype="pdf"` notwithstanding, opens a Markdown- or
+  HTML-looking payload as a Markdown / HTML5 document whose raw characters
+  (form feeds included, the Remote Controller's page-break marker) reached
+  `content.text`; it is now `CorruptDocumentError("… not a PDF …")`.
 
 ## [Unreleased]
 

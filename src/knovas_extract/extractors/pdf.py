@@ -682,6 +682,20 @@ def _open_doc(data: bytes) -> fitz.Document:
         # callers; the contract is "ExtractError or success".
         raise CorruptDocumentError(f"could not parse PDF: {exc}") from exc
 
+    # MuPDF (1.25+) sniffs the stream's content and `filetype` is only a hint:
+    # a payload that starts like Markdown (`# …`) or HTML (`<html>`) opens as a
+    # "Markdown document" / "HTML5" document and its raw characters -- form
+    # feeds included, which are the Remote Controller's page-break marker --
+    # reach the text. This extractor handles PDFs only; anything else that
+    # arrives under application/pdf is an unparseable PDF, not a document
+    # of whatever kind MuPDF recognised.
+    if not doc.is_pdf:
+        recognised = (doc.metadata or {}).get("format") or "non-PDF"
+        doc.close()
+        raise CorruptDocumentError(
+            f"could not parse PDF: the payload is not a PDF (MuPDF recognised it as {recognised!r})"
+        )
+
     # Encryption check. We refuse password-protected PDFs predictably; the
     # blank-password attempt covers PDFs that claim is_encrypted but accept
     # an empty owner password (some scanner-generated PDFs do this).
