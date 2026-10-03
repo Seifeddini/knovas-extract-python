@@ -83,3 +83,21 @@ def test_header_injection_attempt_emits_warning() -> None:
     # Either we surface the X-Forwarded leakage as a warning, or we extracted
     # cleanly. Both are acceptable contracts; just confirm no crash.
     assert r.content.text == "body"
+
+
+@pytest.mark.unit
+def test_html_only_eml_decodes_entities_and_keeps_lines() -> None:
+    from email.message import EmailMessage
+
+    msg = EmailMessage()
+    msg["From"] = "Absender <absender@example.ch>"
+    msg["To"] = "empfaenger@example.ch"
+    msg["Subject"] = "Offerte"
+    msg.set_content(
+        "<html><body><p>Gr&uuml;ezi Herr M&uuml;ller</p><p>Anbei die Offerte &amp; der Vertrag.</p>"
+        "</body></html>",
+        subtype="html",
+    )
+    r = extract(bytes(msg), mime="message/rfc822")
+    assert r.content.text == "Grüezi Herr Müller\n\nAnbei die Offerte & der Vertrag."
+    assert r.metadata.extra["eml:body_source"] == "text/html"

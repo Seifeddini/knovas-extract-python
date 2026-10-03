@@ -7,9 +7,10 @@ Security posture (see SECURITY.md):
 - **CFB / OLE compound file** — extract-msg parses the underlying CFB
   container via olefile. olefile has had CVEs historically; we pin recent
   versions and treat parse failures as CorruptDocumentError.
-- **HTML body fallback**: when only HTML is present in the MSG, we strip
-  tags via the same small regex used in the EML extractor. No external
-  HTML parser. No image/CSS/script loading.
+- **HTML body fallback**: when only HTML is present in the MSG, we convert
+  it with the same small regex converter as the EML extractor (`_html_text`):
+  entities decoded, line structure kept. No external HTML parser. No
+  image/CSS/script loading.
 - **Attachments**: metadata only (name, content_type, size) — never read
   payload bytes into the result. extract-msg lets us iterate attachments
   cheaply via the attachment list without materializing each payload.
@@ -19,11 +20,11 @@ from __future__ import annotations
 
 import contextlib
 import hashlib
-import re
 import tempfile
 from pathlib import Path
 from typing import Any, ClassVar
 
+from knovas_extract._html_text import html_to_text as _strip_html
 from knovas_extract.dispatch import MIME_REGISTRY, make_result
 from knovas_extract.errors import CorruptDocumentError, ResourceExhaustedError
 from knovas_extract.interfaces import IExtractor
@@ -31,14 +32,6 @@ from knovas_extract.normalize import canonicalize_text, word_count
 from knovas_extract.result import ExtractionResult, Limits, Metadata
 
 MSG_MIME = "application/vnd.ms-outlook"
-
-_TAG = re.compile(r"<[^>]+>")
-_WS = re.compile(r"\s+")
-
-
-def _strip_html(s: str) -> str:
-    s = _TAG.sub(" ", s)
-    return _WS.sub(" ", s).strip()
 
 
 class MsgExtractor(IExtractor):
