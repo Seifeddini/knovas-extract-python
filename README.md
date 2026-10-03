@@ -1,13 +1,13 @@
 # knovas-extract
 
-[![CI](https://github.com/knovas/knovas-extract-python/actions/workflows/ci.yml/badge.svg)](https://github.com/knovas/knovas-extract-python/actions/workflows/ci.yml)
+[![CI](https://github.com/Seifeddini/knovas-extract-python/actions/workflows/ci.yml/badge.svg)](https://github.com/Seifeddini/knovas-extract-python/actions/workflows/ci.yml)
 [![PyPI](https://img.shields.io/pypi/v/knovas-extract.svg)](https://pypi.org/project/knovas-extract/)
 [![Python](https://img.shields.io/pypi/pyversions/knovas-extract.svg)](https://pypi.org/project/knovas-extract/)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
 Privacy-preserving, performant document extraction (text + metadata) for the [Knovas Semantix](https://knovas.ch/) platform. **Python reference implementation** of the cross-language `knovas-extract` spec.
 
-> **Status: alpha (0.1.0.dev).** API stable in shape, not yet in version. Not yet on PyPI.
+> **Status: alpha (0.4.0a1).** API stable in shape, not yet in version. Published on PyPI as `knovas-extract`.
 
 ## What it does
 
@@ -132,7 +132,7 @@ r.metadata.extra["pdf:ocr_pages"], r.metadata.extra["pdf:ocr_backend"]
 Full reference (decision rules, backends, budgets, metadata keys, cache
 protocol): [docs/ocr.md](docs/ocr.md).
 
-### Layout text mode (markdown-lite tables, PDF)
+### Layout text mode (markdown-lite tables, PDF and DOCX)
 
 `text_mode="layout"` renders every PDF page from its word boxes — the text
 layer or the OCR words — into *markdown-lite* as `Page.text` itself: `#`
@@ -141,8 +141,10 @@ headings, one ` | ` row per table line with compact fold keys
 forms, `- ` lists. A page without detected structure is **byte-identical to
 plain mode**, so prose corpora are unaffected. `content.sections` carries the
 headings; `metadata.extra` gains `pdf:text_mode`, `pdf:structured_pages`,
-`pdf:layout_tables`. Opt-in; PDF only (other formats emit plain text with a
-warning). CLI: `--text-mode layout`.
+`pdf:layout_tables`. For DOCX, layout mode renders every Word table in place
+with the same row grammar (paragraphs stay as in plain mode; `docx:text_mode`,
+`docx:layout_tables`). Opt-in; PDF and DOCX only (other formats emit plain text
+with a warning). CLI: `--text-mode layout`.
 
 ```python
 r = extract("bilanz.pdf", text_mode="layout", emit_sentences=True)
@@ -241,7 +243,7 @@ For untrusted inputs, run inside a sandbox. Copy-paste recipes for `nsjail`, `bu
 
 ## Spec conformance
 
-This implementation conforms to `spec_version = 1.2.0` of [`knovas/KnowledgeBase/clients/extraction/spec`](https://github.com/knovas/KnowledgeBase/tree/develop/clients/extraction/spec). The pinned spec sha is recorded in `tests/spec/` (Git submodule). Every release runs the spec's golden corpus + adversarial corpus before tagging.
+This implementation conforms to `spec_version = 1.3.0` of [`knovas/KnowledgeBase/clients/extraction/spec`](https://github.com/knovas/KnowledgeBase/tree/develop/clients/extraction/spec). The pinned spec sha is recorded in `tests/spec/` (Git submodule). Every release runs the spec's golden corpus + adversarial corpus before tagging.
 
 To run the golden tests locally against a sibling KnowledgeBase checkout:
 

@@ -6,6 +6,22 @@ A **major** version bump matches the major of `spec_version` it conforms to.
 
 ## [0.4.0a1] — 2026-10-01 (alpha)
 
+### Fixed
+- HTML-only e-mail bodies (EML, MSG) decode entities and keep paragraphs, line
+  breaks and table cells instead of collapsing to one line with `&uuml;` left
+  in; the converter stays linear on hostile markup and never lets an overlong
+  character reference raise.
+- `Limits.max_sentences` caps the output with a counted warning instead of
+  raising `ResourceExhaustedError` (consumers dropped the whole document); the
+  cap is document-wide, also for PDFs.
+- MSG: Outlook categories reach `metadata.extra["msg:categories"]` (read from
+  the named property `Keywords`); before, the key was never set.
+- CI: optional test dependencies are imported through `pytest.importorskip`;
+  the OCR CLI test is portable; mypy, pyright and bandit findings fixed.
+- Project URLs and the release-verification identity point at
+  `github.com/Seifeddini/knovas-extract-python` (the `knovas` organisation
+  URLs did not resolve).
+
 ### Changed — per-page OCR at native / 300 dpi (behaviour change for scanned PDFs)
 - **The OCR decision is made per page, not per document.** `use_ocr="auto"`
   (the default) keeps every page with a usable text layer verbatim and OCRs
@@ -163,7 +179,7 @@ A **major** version bump matches the major of `spec_version` it conforms to.
   (form feeds included, the Remote Controller's page-break marker) reached
   `content.text`; it is now `CorruptDocumentError("… not a PDF …")`.
 
-## [Unreleased]
+## [0.2.0] — 2026-07-23, and the 0.3.0 work (not released separately; part of 0.4.0a1)
 
 ### Added — PDF OCR for scanned documents (0.3.0)
 - **`extract(..., use_ocr="auto", ocr_language="deu+eng")`.** When the PDF

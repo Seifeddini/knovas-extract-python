@@ -6,7 +6,7 @@
 
 **Please do not file a public GitHub issue for security reports.** Use one of:
 
-- **GitHub Private Vulnerability Reporting**: [Open a private advisory](https://github.com/knovas/knovas-extract-python/security/advisories/new). Preferred.
+- **GitHub Private Vulnerability Reporting**: [Open a private advisory](https://github.com/Seifeddini/knovas-extract-python/security/advisories/new). Preferred.
 - **Email**: `security@knovas.ch`. PGP key fingerprint: `TODO — publish on first release`.
 
 Include:
@@ -65,13 +65,13 @@ Every release:
 
 ```bash
 python -m sigstore verify identity \
-  --cert-identity 'https://github.com/knovas/knovas-extract-python/.github/workflows/release.yml@refs/tags/v<VERSION>' \
+  --cert-identity 'https://github.com/Seifeddini/knovas-extract-python/.github/workflows/release.yml@refs/tags/v<VERSION>' \
   --cert-oidc-issuer 'https://token.actions.githubusercontent.com' \
   knovas_extract-<VERSION>-py3-none-any.whl
 
 slsa-verifier verify-artifact knovas_extract-<VERSION>-py3-none-any.whl \
   --provenance-path knovas_extract-<VERSION>.intoto.jsonl \
-  --source-uri github.com/knovas/knovas-extract-python \
+  --source-uri github.com/Seifeddini/knovas-extract-python \
   --source-tag v<VERSION>
 ```
 

@@ -104,12 +104,12 @@ all = [
 ]
 
 [project.urls]
-Homepage      = "https://github.com/knovas/knovas-extract-python"
-Documentation = "https://github.com/knovas/knovas-extract-python#readme"
-Repository    = "https://github.com/knovas/knovas-extract-python"
-Issues        = "https://github.com/knovas/knovas-extract-python/issues"
-Security      = "https://github.com/knovas/knovas-extract-python/blob/main/SECURITY.md"
-Changelog     = "https://github.com/knovas/knovas-extract-python/blob/main/CHANGELOG.md"
+Homepage      = "https://github.com/Seifeddini/knovas-extract-python"
+Documentation = "https://github.com/Seifeddini/knovas-extract-python#readme"
+Repository    = "https://github.com/Seifeddini/knovas-extract-python"
+Issues        = "https://github.com/Seifeddini/knovas-extract-python/issues"
+Security      = "https://github.com/Seifeddini/knovas-extract-python/blob/main/SECURITY.md"
+Changelog     = "https://github.com/Seifeddini/knovas-extract-python/blob/main/CHANGELOG.md"
 
 [project.scripts]
 knovas-extract = "knovas_extract.cli:main"

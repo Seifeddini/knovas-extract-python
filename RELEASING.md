@@ -41,19 +41,19 @@ WHEEL=$(ls knovas_extract-*.whl)
 
 # 1. Sigstore signature.
 python -m sigstore verify identity \
-  --cert-identity "https://github.com/knovas/knovas-extract-python/.github/workflows/release.yml@refs/tags/v<VERSION>" \
+  --cert-identity "https://github.com/Seifeddini/knovas-extract-python/.github/workflows/release.yml@refs/tags/v<VERSION>" \
   --cert-oidc-issuer "https://token.actions.githubusercontent.com" \
   "$WHEEL"
 
 # 2. SLSA L3 provenance.
-curl -sLO "https://github.com/knovas/knovas-extract-python/releases/download/v<VERSION>/$WHEEL.intoto.jsonl"
+curl -sLO "https://github.com/Seifeddini/knovas-extract-python/releases/download/v<VERSION>/$WHEEL.intoto.jsonl"
 slsa-verifier verify-artifact "$WHEEL" \
   --provenance-path "$WHEEL.intoto.jsonl" \
-  --source-uri github.com/knovas/knovas-extract-python \
+  --source-uri github.com/Seifeddini/knovas-extract-python \
   --source-tag "v<VERSION>"
 
 # 3. SBOM exists and matches.
-curl -sLO "https://github.com/knovas/knovas-extract-python/releases/download/v<VERSION>/sbom.cdx.json"
+curl -sLO "https://github.com/Seifeddini/knovas-extract-python/releases/download/v<VERSION>/sbom.cdx.json"
 jq -r '.metadata.component.version' sbom.cdx.json
 # Expect: <VERSION>
 
