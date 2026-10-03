@@ -18,6 +18,11 @@ A **major** version bump matches the major of `spec_version` it conforms to.
   the named property `Keywords`); before, the key was never set.
 - CI: optional test dependencies are imported through `pytest.importorskip`;
   the OCR CLI test is portable; mypy, pyright and bandit findings fixed.
+- `[html]` and `[markdown]` cap `selectolax < 1`: selectolax 1.0 (2026-10-03)
+  removed the Modest backend (`selectolax.parser`) that the HTML extractor and
+  the Markdown sanitizer use, so a fresh install failed every HTML extraction
+  and every `emit_markdown=True` call with a misleading `DependencyMissingError`.
+  Moving to the Lexbor backend is a separate change.
 - Project URLs and the release-verification identity point at
   `github.com/Seifeddini/knovas-extract-python` (the `knovas` organisation
   URLs did not resolve).

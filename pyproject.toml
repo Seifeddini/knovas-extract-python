@@ -51,7 +51,10 @@ minimal = []
 pdf  = ["pymupdf >= 1.24.0"]  # AGPL (via pymupdf)
 docx = ["python-docx >= 1.1.2", "mammoth >= 1.8.0"]
 msg  = ["extract-msg >= 0.48.0"]          # GPL
-html = ["selectolax >= 0.3.21"]
+# selectolax 1.0 (2026-10-03) removed the Modest backend (`selectolax.parser`)
+# that the HTML extractor and the Markdown sanitizer use; capped until they
+# move to the Lexbor backend (`selectolax.lexbor`).
+html = ["selectolax >= 0.3.21, < 1"]
 rtf  = ["striprtf >= 0.0.27"]
 md   = ["python-frontmatter >= 1.1.0"]
 
@@ -91,7 +94,7 @@ ocr = [
 # user to install the very extra they already had. selectolax is also in
 # [html], but that extra is about *extracting* HTML input, which is a
 # different opt-in; depending on it here would silently couple the two.
-markdown = ["markdownify >= 0.13.1,< 2.0", "selectolax >= 0.3.21"]
+markdown = ["markdownify >= 0.13.1,< 2.0", "selectolax >= 0.3.21, < 1"]
 
 # Sentence tokenization (opt-in `extract(..., emit_sentences=True)`). pysbd
 # is pure-Python (MIT), 22 languages, no model download. See
