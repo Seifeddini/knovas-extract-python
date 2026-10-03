@@ -33,6 +33,29 @@ from knovas_extract.result import ExtractionResult, Limits, Metadata
 
 MSG_MIME = "application/vnd.ms-outlook"
 
+#: MS-OXPROPS property set of PidNameKeywords, the Outlook categories.
+_PS_PUBLIC_STRINGS = "{00020329-0000-0000-C000-000000000046}"
+
+
+def _categories(msg: Any) -> Any:
+    """Outlook categories of a message, or None.
+
+    extract-msg has no ``categories`` attribute on a ``Message``; Outlook keeps
+    them in the named property ``Keywords`` of PS_PUBLIC_STRINGS (extract-msg's
+    calendar classes read it the same way). A damaged named-property stream
+    must not fail the extraction, so any error reads as "no categories".
+    """
+    value = getattr(msg, "categories", None)
+    if value:
+        return value
+    getter = getattr(msg, "getNamedProp", None)
+    if getter is None:
+        return None
+    try:
+        return getter("Keywords", _PS_PUBLIC_STRINGS)
+    except Exception:
+        return None
+
 
 class MsgExtractor(IExtractor):
     """Outlook .msg / OLE compound file extractor."""
@@ -154,7 +177,7 @@ class MsgExtractor(IExtractor):
                     ("msg:in_reply_to", getattr(msg, "inReplyTo", None)),
                     ("msg:conversation_topic", getattr(msg, "conversationTopic", None)),
                     ("msg:conversation_index", getattr(msg, "conversationIndex", None)),
-                    ("msg:categories", getattr(msg, "categories", None)),
+                    ("msg:categories", _categories(msg)),
                     (
                         "msg:sent_representing",
                         getattr(msg, "sentRepresentingName", None)
