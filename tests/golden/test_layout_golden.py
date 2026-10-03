@@ -25,11 +25,13 @@ from pathlib import Path
 from typing import Any, cast
 
 import pytest
-import yaml
 
-from knovas_extract import _layout as L
-from knovas_extract._layout import check_invariants
-from tests.eval import metrics as M
+yaml = pytest.importorskip("yaml")
+pytest.importorskip("rapidfuzz")
+
+from knovas_extract import _layout as L  # noqa: E402
+from knovas_extract._layout import check_invariants  # noqa: E402
+from tests.eval import metrics as M  # noqa: E402
 
 pytestmark = [pytest.mark.golden]
 

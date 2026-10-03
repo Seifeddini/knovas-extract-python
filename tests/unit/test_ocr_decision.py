@@ -24,10 +24,11 @@ from __future__ import annotations
 import io
 from dataclasses import dataclass, field
 
-import fitz  # type: ignore[import-untyped]
 import pytest
 
 from knovas_extract import extract
+
+fitz = pytest.importorskip("fitz")
 
 pytestmark = [pytest.mark.unit]
 
