@@ -82,6 +82,9 @@ InputT = Union[str, "os.PathLike[str]", bytes, bytearray, memoryview]
 UseOcrT = bool | Literal["auto"]
 DEFAULT_OCR_LANGUAGE = "deu+eng"
 
+_DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+_LAYOUT_MIMES = frozenset({"application/pdf", _DOCX_MIME})
+
 
 def _read_input(input: InputT, limits: Limits) -> tuple[bytes, str | None, str | None]:
     """Return (bytes, filename-or-None, path-or-None). Enforces max_input_bytes.
@@ -299,18 +302,19 @@ def extract(
             ``ocr_page_timeout_seconds``, ``max_ocr_workers``,
             ``max_ocr_image_megapixels``) and are fail-soft: pages beyond a
             budget are counted (``pdf:ocr_pages_skipped``), never raised.
-        text_mode: ``"plain"`` (default) or ``"layout"``. PDF only. In
-            layout mode every page is rendered from its word boxes into
-            *markdown-lite* (``#`` headings, one `` | `` row per table line
-            with compact fold keys, ``Key: value`` forms, ``- `` lists) as
-            `Page.text` itself; a page without detected structure is
-            byte-identical to plain mode (GI-EXTRACT-03). `content.sections`
-            carries the emitted headings; `metadata.extra` gains
-            ``pdf:text_mode``, ``pdf:structured_pages``, ``pdf:layout_tables``.
-            For every other format the value is accepted, the plain text is
-            emitted unchanged and one warning says so (DOCX layout mode is a
-            later milestone). An unknown value raises `ValueError`. See
-            docs/layout-text-mode.md.
+        text_mode: ``"plain"`` (default) or ``"layout"``. PDF and DOCX
+            (DOCX: tables rendered in place; metadata ``docx:text_mode``,
+            ``docx:layout_tables``). In layout mode every PDF page is
+            rendered from its word boxes into *markdown-lite* (``#``
+            headings, one `` | `` row per table line with compact fold keys,
+            ``Key: value`` forms, ``- `` lists) as `Page.text` itself; a page
+            without detected structure is byte-identical to plain mode
+            (GI-EXTRACT-03). `content.sections` carries the emitted headings;
+            `metadata.extra` gains ``pdf:text_mode``,
+            ``pdf:structured_pages``, ``pdf:layout_tables``. For every other
+            format the value is accepted, the plain text is emitted unchanged
+            and one warning says so. An unknown value raises `ValueError`.
+            See docs/layout-text-mode.md.
 
     Returns:
         ExtractionResult — guaranteed to validate against spec/schema.json.
@@ -345,6 +349,8 @@ def extract(
             extract_kwargs["use_ocr"] = use_ocr
             extract_kwargs["ocr_language"] = ocr_language
             extract_kwargs["ocr"] = ocr
+            extract_kwargs["text_mode"] = mode
+        elif detected_mime == _DOCX_MIME:
             extract_kwargs["text_mode"] = mode
         result = extractor.extract(data, **extract_kwargs)
     except ImportError as exc:
@@ -392,11 +398,11 @@ def extract(
         ),
     )
 
-    # text_mode is a PDF feature in 0.4.0: every other extractor runs in plain
+    # text_mode is a PDF and DOCX feature: every other extractor runs in plain
     # mode and the caller is told once (counts, no content — GI-EXTRACT-04).
-    if mode != "plain" and detected_mime != "application/pdf":
+    if mode != "plain" and detected_mime not in _LAYOUT_MIMES:
         result.warnings.append(
-            f"text_mode={mode!r} is implemented for PDF only; plain text emitted"
+            f"text_mode={mode!r} is implemented for PDF and DOCX only; plain text emitted"
         )
 
     # Defense-in-depth: if an extractor populated `content.markdown` on the

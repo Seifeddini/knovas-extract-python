@@ -57,11 +57,33 @@ CLI: `knovas-extract bilanz.pdf --text-mode layout`.
   `ValueError`. The three `pdf:*` scalars above are present **only** in layout
   mode — the default output of 0.4.0 is byte-identical to plain mode, with no
   new keys and no `content.sections`.
-* **PDF only in 0.4.0.** For every other format (DOCX, HTML, …) the kwarg is
-  accepted, the extractor runs in plain mode and exactly one warning is added:
-  `text_mode='layout' is implemented for PDF only; plain text emitted`. DOCX
-  layout mode is a later milestone (plan M4); the RemoteController therefore
-  passes `text_mode` for PDFs only.
+* **PDF and DOCX.** For every other format (HTML, EML, …) the kwarg is accepted,
+  the extractor runs in plain mode and exactly one warning is added:
+  `text_mode='layout' is implemented for PDF and DOCX only; plain text emitted`.
+* **DOCX**: the body is walked in document order; paragraphs are emitted exactly
+  as in plain mode, and every table is rendered in place with the table grammar
+  below (the row grammar of `render_table_parts`, the PDF table renderer):
+  header line on top of every pack of ≤ 150 estimated tokens, compact fold
+  keys, `#### ` section rows, `(Forts.)` splits. The first row is the header (as
+  in `content.tables`); cells are read by grid column, so a row that starts
+  late (`w:gridBefore`) keeps its column keys; a horizontally merged cell keeps
+  its text in its first column, a vertically merged one repeats it on the rows
+  it spans (as `content.tables` does); nested tables are flattened into their
+  cell. A one-row table becomes one ` | ` line. A Word cell has no length limit,
+  so three bounds keep every line ≤ 200 estimated tokens / 1800 chars and the
+  text proportional to the cells: text longer than a quarter of a row is
+  written once instead of repeated (a label on its `(Forts.)` lines, a
+  vertically merged cell on its rows), a header line over half the pack budget
+  is written once instead of on every pack, and a token longer than half a row
+  is cut. Fail-soft per table, as plain mode has no table text at all: a table
+  that cannot be rendered, or whose text would not fit in what the paragraphs
+  leave of `Limits.max_text_bytes`, is left out with one counted warning
+  (`docx: layout rendering failed on N tables (…); omitted from text`,
+  `docx: N tables over the text size limit omitted from text`). A DOCX without
+  tables is byte-identical to plain mode. Metadata: `docx:text_mode`,
+  `docx:layout_tables`. `content.tables` is unchanged; `content.sections` (from
+  the Word headings) carry line numbers into the layout text and never point
+  into a table.
 * **Per page**: a born-digital page is rendered from the words of the *same*
   PyMuPDF text page that produced its plain text (`TEXTFLAGS_TEXT`), plus the
   vector rulings; an OCR'd page from the engine's word boxes (already in page
@@ -81,8 +103,10 @@ CLI: `knovas-extract bilanz.pdf --text-mode layout`.
 
 Tests: `tests/unit/test_extractors_pdf_layout.py` (byte-identity, grammar,
 sections, contracts, determinism incl. 1 vs 4 OCR workers, expansion bound),
-`tests/golden/test_prose_regression.py` (20 synthetic one-/two-column law-firm
-contracts byte-identical to plain mode), `tests/property/test_layout_properties.py`.
+`tests/unit/test_extractors_docx_layout.py` (DOCX: placement, bounds, merges,
+fail-soft, sections), `tests/golden/test_prose_regression.py` (20 synthetic
+one-/two-column law-firm contracts byte-identical to plain mode),
+`tests/property/test_layout_properties.py`.
 
 ## Public API
 
@@ -142,7 +166,8 @@ section_row := "#### " label              a label-only row heading ≥ 2 data ro
 ```
 
 Rows over 200 estimated tokens or 1800 characters are split into continuation
-lines that repeat the label plus `(Forts.)`.
+lines that repeat the label plus `(Forts.)` (DOCX: a label longer than a quarter
+of a row is split like a cell instead and not repeated).
 
 ## Server facts the grammar is designed against
 

@@ -29,14 +29,14 @@ A **major** version bump matches the major of `spec_version` it conforms to.
 
 ### Added — layout text mode (`text_mode="layout"`, `docs/layout-text-mode.md`)
 - **`extract(..., text_mode="layout")`** and `--text-mode layout` on the CLI
-  (PDF only; opt-in, `"plain"` stays the default). Every page is rendered
-  from its word boxes — the born-digital text layer through the same PyMuPDF
-  text page that produces the plain text, or the OCR words of a scanned
-  page — into *markdown-lite* as `Page.text` itself: `#` headings (level
-  ≤ 4, blank line after each), one ` | ` row per table line with compact
-  fold keys for numeric cells (`2023: 1'234.00`), the header repeated on top
-  of every ≤ 150-token pack, `Key: value` forms, `- ` lists. The library
-  never emits `\f`.
+  (PDF; DOCX tables: see below; opt-in, `"plain"` stays the default). Every
+  page is rendered from its word boxes — the born-digital text layer through
+  the same PyMuPDF text page that produces the plain text, or the OCR words of
+  a scanned page — into *markdown-lite* as `Page.text` itself: `#` headings
+  (level ≤ 4, blank line after each), one ` | ` row per table line with
+  compact fold keys for numeric cells (`2023: 1'234.00`), the header repeated
+  on top of every ≤ 150-token pack, `Key: value` forms, `- ` lists. The
+  library never emits `\f`.
 - **GI-EXTRACT-03**: a page without detected structure (no table region, no
   key-value block, no OCR prose gutter) is emitted **byte-identical to plain
   mode**; the 20-document synthetic law-firm gate
@@ -50,8 +50,9 @@ A **major** version bump matches the major of `spec_version` it conforms to.
   matches plain mode on unstructured documents.
 - A kept scanner-stamp text layer over an OCR'd page leads the page as a
   paragraph above the OCR layout. Layout failures are fail-soft per page
-  (plain text, counted warning). Other formats accept the kwarg, emit plain
-  text and warn once (`text_mode='layout' is implemented for PDF only`).
+  (plain text, counted warning). Formats other than PDF and DOCX accept the
+  kwarg, emit plain text and warn once
+  (`text_mode='layout' is implemented for PDF and DOCX only`).
 - New `src/knovas_extract/_layout/` (pure-Python renderer, golden fixtures
   under `tests/fixtures/treuhand/`) and `_pdf_layout.py` (wiring);
   `pytest --update-golden` rewrites the golden-layout expectations.
@@ -86,6 +87,27 @@ A **major** version bump matches the major of `spec_version` it conforms to.
   and a false `#` is prepended to every chunk below it on the server. The
   attempt is kept as `docs/superpowers/patches/2026-10-02-knovas-extract-ocr-title-block.patch`
   in the KnowledgeBase repository.
+
+### Added — DOCX layout mode
+- **`extract(docx, text_mode="layout")`** renders every table in place with the
+  PDF row grammar (header per pack, fold keys, section rows); before, DOCX table
+  text existed only in `content.tables`, which the Knovas server's part buffer
+  does not keep — table content was not searchable. Plain mode is unchanged; a
+  DOCX without tables is byte-identical in both modes. Metadata
+  `docx:text_mode`, `docx:layout_tables`. The warning for other formats reads
+  `text_mode='layout' is implemented for PDF and DOCX only; plain text emitted`.
+- Word cells have no length limit, so every line stays within the row limits
+  (≤ 200 estimated tokens, ≤ 1800 chars): text longer than a quarter of a row
+  is written once instead of repeated (a label on its `(Forts.)` lines, a
+  vertically merged cell on its rows), a header line over half the pack budget
+  is written once instead of on every pack, a token longer than half a row is
+  cut. Cells are read by grid column from the XML (a row with `w:gridBefore`
+  keeps its fold keys; a vertical merge without a cell above, or over ~1000
+  rows, no longer raises). Fail-soft per table: a table that cannot be
+  rendered, or whose text would exceed `Limits.max_text_bytes`, is left out
+  with one counted warning (`docx: layout rendering failed on N tables (…);
+  omitted from text`, `docx: N tables over the text size limit omitted from
+  text`). `content.sections` never locate a heading inside table text.
 
 ### Added — OCR engines, budgets, options (`docs/ocr.md`)
 - **`extract(..., ocr=OcrOptions(...))`** and `--ocr-engine/--ocr-dpi/
