@@ -9,6 +9,10 @@ Contract (see docs/citations.md for the full reference):
     computed from (so `line_start = 1 + text[:char_start].count("\\n")`).
   - Sentences are ordered and non-overlapping; `index` is monotonic 0-based.
   - Empty text → `[]` (never None).
+  - At most `Limits.max_sentences` sentences per document. When the cap
+    stops splitting, the list holds only the document's first sentences
+    (nothing after the last `char_end` is covered) and a warning that
+    starts with `sentences:` and contains `max_sentences (` says so.
 
 The consumer-facing dispatch layer enforces additional guarantees
 (sentence↔page, sentence↔section back-pointer). This module produces the
@@ -18,16 +22,20 @@ Security posture:
   - No network. pysbd is pure-Python — validated by
     `tests/property/test_network_isolation.py`.
   - ReDoS: pysbd is regex-heavy. `Limits.max_text_bytes` caps input
-    upstream; `Limits.max_sentences` caps output. The fuzz harness
-    (`tests/fuzz/fuzz_sentences.py`) runs with a 30 s per-call wall-clock
-    timeout to catch regressions.
+    upstream; `Limits.max_sentences` caps output (fail-soft since
+    0.4.0a1). The cap bounds the work only for paged input, whose pages
+    after the cap are not split. A single text is segmented whole before
+    the cap applies, and pysbd's `segment()` searches the text from the
+    start for every sentence it maps back (superlinear in the sentence
+    count), so a caller that needs a time bound on large unpaged text
+    must gate it by size. No fuzz target exercises this module yet.
 """
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, cast
 
-from knovas_extract.errors import DependencyMissingError, ResourceExhaustedError
+from knovas_extract.errors import DependencyMissingError
 from knovas_extract.result import Sentence
 
 if TYPE_CHECKING:
@@ -95,8 +103,10 @@ def split_sentences(
     ``start_index`` is the ``index`` value assigned to the first sentence
     (used for the same stitching path).
 
-    Raises ``DependencyMissingError`` if pysbd is unavailable,
-    ``ResourceExhaustedError`` on ``max_sentences`` overflow, and
+    Keeps at most ``limits.max_sentences - start_index`` sentences and adds one
+    counted warning when it stops early (never the text). The whole text is
+    segmented before the cap applies: the cap bounds the output, not the time.
+    Raises ``DependencyMissingError`` if pysbd is unavailable and
     ``RuntimeError`` on a producer-side invariant violation.
     """
     if not text:
@@ -117,6 +127,9 @@ def split_sentences(
     result: list[Sentence] = []
     cursor = 0
     missing = 0
+    # Fail-soft cap: keep the first `max_sentences` of the document (start_index
+    # counts the sentences earlier pages already produced).
+    budget = max(0, limits.max_sentences - start_index)
 
     # Running newline count so line coords stay O(len(text)) overall.
     # Counting from 0 per sentence is quadratic and stalls on large,
@@ -125,10 +138,16 @@ def split_sentences(
     newlines_before = 0
     counted_to = 0
 
-    for raw in raw_segments:
+    for pos, raw in enumerate(raw_segments):
         segment = raw.strip()
         if not segment:
             continue
+        if len(result) >= budget:
+            omitted = sum(1 for r in raw_segments[pos:] if r.strip())
+            warnings.append(
+                f"sentences: {omitted} beyond max_sentences ({limits.max_sentences}) omitted"
+            )
+            break
 
         # Locate this segment in the source starting from cursor.
         loc = text.find(segment, cursor)
@@ -165,11 +184,6 @@ def split_sentences(
                 page_number=(page_index + 1) if page_index is not None else None,
             )
         )
-
-        if len(result) > limits.max_sentences:
-            raise ResourceExhaustedError(
-                "sentence count", limits.max_sentences, observed=len(result)
-            )
 
     if missing:
         warnings.append(f"sentences: {missing} segments could not be located")
@@ -221,6 +235,12 @@ def split_sentences_for_pages(
     char + line offsets aligned with `content.text`.
 
     Every returned sentence carries `page_index` (and thus `page_number`).
+
+    Fail-soft at `limits.max_sentences` for the whole document: the page that
+    reaches the cap keeps its prefix (counted warning from `split_sentences`),
+    later pages are not split and one more warning counts them. Never raises
+    for the count. Until 0.4.0a1 the cap was checked per page, so paged input
+    was never capped.
     """
     if not pages:
         return []
@@ -228,7 +248,14 @@ def split_sentences_for_pages(
     result: list[Sentence] = []
     cursor_char = 0  # char offset into document_text
 
-    for page in pages:
+    for pos, page in enumerate(pages):
+        if len(result) >= limits.max_sentences:
+            rest = sum(1 for p in pages[pos:] if p.text)
+            if rest:
+                warnings.append(
+                    f"sentences: {rest} pages after max_sentences ({limits.max_sentences}) not split"
+                )
+            break
         page_text = page.text
         if not page_text:
             # Empty page still consumes coordinates (the join separator).

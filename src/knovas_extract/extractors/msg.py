@@ -7,9 +7,10 @@ Security posture (see SECURITY.md):
 - **CFB / OLE compound file** — extract-msg parses the underlying CFB
   container via olefile. olefile has had CVEs historically; we pin recent
   versions and treat parse failures as CorruptDocumentError.
-- **HTML body fallback**: when only HTML is present in the MSG, we strip
-  tags via the same small regex used in the EML extractor. No external
-  HTML parser. No image/CSS/script loading.
+- **HTML body fallback**: when only HTML is present in the MSG, we convert
+  it with the same small regex converter as the EML extractor (`_html_text`):
+  entities decoded, line structure kept. No external HTML parser. No
+  image/CSS/script loading.
 - **Attachments**: metadata only (name, content_type, size) — never read
   payload bytes into the result. extract-msg lets us iterate attachments
   cheaply via the attachment list without materializing each payload.
@@ -19,11 +20,11 @@ from __future__ import annotations
 
 import contextlib
 import hashlib
-import re
 import tempfile
 from pathlib import Path
 from typing import Any, ClassVar
 
+from knovas_extract._html_text import html_to_text as _strip_html
 from knovas_extract.dispatch import MIME_REGISTRY, make_result
 from knovas_extract.errors import CorruptDocumentError, ResourceExhaustedError
 from knovas_extract.interfaces import IExtractor
@@ -32,13 +33,28 @@ from knovas_extract.result import ExtractionResult, Limits, Metadata
 
 MSG_MIME = "application/vnd.ms-outlook"
 
-_TAG = re.compile(r"<[^>]+>")
-_WS = re.compile(r"\s+")
+#: MS-OXPROPS property set of PidNameKeywords, the Outlook categories.
+_PS_PUBLIC_STRINGS = "{00020329-0000-0000-C000-000000000046}"
 
 
-def _strip_html(s: str) -> str:
-    s = _TAG.sub(" ", s)
-    return _WS.sub(" ", s).strip()
+def _categories(msg: Any) -> Any:
+    """Outlook categories of a message, or None.
+
+    extract-msg has no ``categories`` attribute on a ``Message``; Outlook keeps
+    them in the named property ``Keywords`` of PS_PUBLIC_STRINGS (extract-msg's
+    calendar classes read it the same way). A damaged named-property stream
+    must not fail the extraction, so any error reads as "no categories".
+    """
+    value = getattr(msg, "categories", None)
+    if value:
+        return value
+    getter = getattr(msg, "getNamedProp", None)
+    if getter is None:
+        return None
+    try:
+        return getter("Keywords", _PS_PUBLIC_STRINGS)
+    except Exception:
+        return None
 
 
 class MsgExtractor(IExtractor):
@@ -161,7 +177,7 @@ class MsgExtractor(IExtractor):
                     ("msg:in_reply_to", getattr(msg, "inReplyTo", None)),
                     ("msg:conversation_topic", getattr(msg, "conversationTopic", None)),
                     ("msg:conversation_index", getattr(msg, "conversationIndex", None)),
-                    ("msg:categories", getattr(msg, "categories", None)),
+                    ("msg:categories", _categories(msg)),
                     (
                         "msg:sent_representing",
                         getattr(msg, "sentRepresentingName", None)

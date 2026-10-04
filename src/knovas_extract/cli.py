@@ -80,10 +80,11 @@ def main(argv: list[str] | None = None) -> int:
         choices=["plain", "layout"],
         default="plain",
         help=(
-            "PDF page text rendering: plain (default) or layout (markdown-lite: "
-            "'#' headings, one ' | ' row per table line, 'Key: value' forms; "
-            "unstructured pages stay byte-identical to plain). Other formats "
-            "emit plain text with a warning."
+            "PDF and DOCX text rendering: plain (default) or layout. PDF: "
+            "markdown-lite ('#' headings, one ' | ' row per table line, "
+            "'Key: value' forms; unstructured pages stay byte-identical to "
+            "plain). DOCX: tables rendered in place as ' | ' rows. Other "
+            "formats emit plain text with a warning."
         ),
     )
     args = parser.parse_args(argv)

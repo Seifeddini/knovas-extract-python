@@ -13,7 +13,8 @@ Byte-identity guarantees pinned here:
 (e) determinism: two runs and 1 vs 4 OCR workers are byte-identical;
 (f) a mixed document OCRs the raster page and renders its rows (fake backend);
 (g) `len(layout) <= 1.5 * len(plain) + 4096` on every fixture;
-(h) `text_mode="layout"` on a DOCX emits plain text with one warning.
+(h) `text_mode="layout"` on a DOCX without tables emits the plain text, no
+    warning and no `pdf:*` keys (DOCX layout: test_extractors_docx_layout.py).
 
 The OCR engine is the fake `FakeWordsOcrBackend` (canned word rows), so the
 OCR → layout path runs on every CI leg without Tesseract.
@@ -292,7 +293,7 @@ def test_expansion_bound_mixed(mixed: tuple[bytes, bytes]) -> None:
 # ── (h) non-PDF input ──────────────────────────────────────────────────────
 
 
-def test_docx_in_layout_mode_emits_plain_text_with_warning() -> None:
+def test_docx_without_tables_in_layout_mode_matches_plain_without_warning() -> None:
     docx = pytest.importorskip("docx")
     d = docx.Document()
     d.add_heading("Vertrag", level=1)
@@ -307,7 +308,7 @@ def test_docx_in_layout_mode_emits_plain_text_with_warning() -> None:
     assert layout.content.sections == plain.content.sections
     assert not any(k in layout.metadata.extra for k in LAYOUT_KEYS)
     extra = [w for w in layout.warnings if w not in plain.warnings]
-    assert extra == ["text_mode='layout' is implemented for PDF only; plain text emitted"]
+    assert extra == []  # DOCX has a layout mode since 0.4.0a1; no table -> identical text
 
 
 def test_invalid_text_mode_raises_value_error(bilanz: bytes) -> None:

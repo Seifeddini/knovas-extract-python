@@ -329,10 +329,13 @@ class TestSelectBackend:
 # ── the CLI child: minimal env, no shell, stderr discarded, hard timeout ────
 
 
+_FAKE_TESSERACT = os.path.abspath("/usr/bin/tesseract")  # absolute on every host OS
+
+
 class TestCliInvocation:
     @pytest.fixture
     def cli(self, monkeypatch, tessdata) -> CliBackend:
-        monkeypatch.setattr(shutil, "which", lambda name: "/usr/bin/tesseract")
+        monkeypatch.setattr(shutil, "which", lambda name: _FAKE_TESSERACT)
         monkeypatch.setattr(
             backend_mod, "_cli_list_langs", lambda b: (tessdata, frozenset({"deu", "eng"}))
         )
@@ -351,7 +354,7 @@ class TestCliInvocation:
 
     def test_argv_is_a_fixed_list(self, cli):
         argv = cli.argv(dpi=300, psm=3)
-        assert argv[0] == "/usr/bin/tesseract" and os.path.isabs(argv[0])
+        assert argv[0] == _FAKE_TESSERACT and os.path.isabs(argv[0])
         assert argv[1:3] == ["stdin", "stdout"]
         assert argv[-1] == "tsv"
         assert "-c" in argv and "preserve_interword_spaces=1" in argv

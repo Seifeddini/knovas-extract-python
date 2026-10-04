@@ -170,7 +170,8 @@ def to_array(samples: bytes, width: int, height: int) -> NDArray:
 
 def pgm_bytes(arr: NDArray) -> bytes:
     h, w = arr.shape
-    return b"P5\n%d %d\n255\n" % (w, h) + np.ascontiguousarray(arr).tobytes()
+    data: bytes = np.ascontiguousarray(arr).tobytes()
+    return b"P5\n%d %d\n255\n" % (w, h) + data
 
 
 def otsu_threshold(arr: NDArray) -> int:

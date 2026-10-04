@@ -341,13 +341,15 @@ def run_document_ocr(
         )
         executor_factory = _process_executor_factory
 
-        def submit(executor: Executor, i: int) -> Future[Any]:
+        def _submit_process(executor: Executor, i: int) -> Future[Any]:
             if i in hits:
                 fut: Future[Any] = Future()
                 fut.set_result((None, hits.pop(i)))
                 return fut
             pi = images[i]
             return executor.submit(_process_task, spec, pi, options.retry_psm4, key_suffix(pi.dpi))
+
+        submit = _submit_process
 
     run = run_ocr_schedule(
         scheduled,

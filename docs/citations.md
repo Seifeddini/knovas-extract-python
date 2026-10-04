@@ -336,7 +336,7 @@ same sentence boundaries.
 
 | Field | Default | Applies to |
 |---|---|---|
-| `max_sentences` | 100,000 | Explicit DoS cap on the sentence array. Pathological many-short-sentence inputs raise `ResourceExhaustedError("sentence count", ...)`. |
+| `max_sentences` | 100,000 | Explicit DoS cap on the sentence array, fail-soft since 0.4.0a1: the first `max_sentences` sentences of the document are kept and one counted warning says how many were omitted (and how many pages were not split). The text is unaffected. |
 | `max_text_bytes` | 50 MiB | Upstream cap on `content.text`. Also caps the input pysbd sees. |
 | `max_path_length` | 4096 | `Source.path` length. POSIX PATH_MAX. |
 

@@ -10,8 +10,8 @@ Security posture (see SECURITY.md):
   fields but never re-serialize. A CRLF in a header doesn't extend our output.
 - **HTML body content**: when a multipart message offers both text/plain and
   text/html, we prefer text/plain (per RFC 2046). If only HTML is present, we
-  strip tags with a deliberately-tiny regex — no external HTML parser to feed
-  hostile markup.
+  convert it with the small regex converter in `_html_text` (no HTML parser):
+  entities decoded, line structure kept.
 - **Attachment payloads**: never retained in the result — only name,
   content_type, and size are surfaced under `metadata.extra`. Measuring the
   decoded size does transiently decode the part, but the decoded bytes are
@@ -25,24 +25,15 @@ import contextlib
 import email
 import email.policy
 import hashlib
-import re
 from email.message import EmailMessage
 from typing import ClassVar, cast
 
+from knovas_extract._html_text import html_to_text as _strip_html
 from knovas_extract.dispatch import MIME_REGISTRY, make_result
 from knovas_extract.errors import CorruptDocumentError, ResourceExhaustedError
 from knovas_extract.interfaces import IExtractor
 from knovas_extract.normalize import canonicalize_text, word_count
 from knovas_extract.result import ExtractionResult, Limits, Metadata
-
-_TAG = re.compile(r"<[^>]+>")
-_WS = re.compile(r"\s+")
-
-
-def _strip_html(s: str) -> str:
-    """Very small HTML→text — for emails where only text/html is available."""
-    s = _TAG.sub(" ", s)
-    return _WS.sub(" ", s).strip()
 
 
 def _safe_header(msg: EmailMessage, name: str) -> str | None:

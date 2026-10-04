@@ -18,9 +18,10 @@ import time
 import pytest
 
 from knovas_extract import extract
-from tests.eval.metrics import bow
 
 pytest.importorskip("fitz")
+pytest.importorskip("rapidfuzz")
+from tests.eval.metrics import bow  # noqa: E402
 from tests.synth.pdf_docs import LawFirmDoc, lawfirm_corpus  # noqa: E402
 
 pytestmark = [pytest.mark.golden]

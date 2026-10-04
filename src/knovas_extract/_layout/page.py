@@ -227,8 +227,10 @@ class DocumentLayoutPass:
 def _ensure_doc(layout: PageLayout) -> DocStats:
     if layout.doc is None:
         DocumentLayoutPass(layout.opts).fit([layout])
-    assert layout.doc is not None
-    return layout.doc
+    doc = layout.doc
+    if doc is None:  # fit() always sets it; checked explicitly so -O cannot drop it
+        raise RuntimeError("layout: document statistics missing after fit()")
+    return doc
 
 
 def _ensure_structure(layout: PageLayout) -> PageStructure:
